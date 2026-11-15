@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Senza sfondo">
+<meta name="theme-color" content="#111111">
+<title>Senza sfondo</title>
+<style>
+:root{--bg:#f6f6f4;--card:#fff;--tx:#222;--ac:#2a6df4;--sc:#ddd;--sc2:#fff}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1e;--tx:#eee;--sc:#333;--sc2:#444}}
+*{box-sizing:border-box}
+body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--tx);
+padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
+h1{font-size:24px;margin:0 0 14px}
+.btn{display:block;width:100%;background:var(--ac);color:#fff;border:0;border-radius:12px;padding:16px;
+font-size:17px;font-weight:600;text-align:center;text-decoration:none;margin-bottom:10px}
+.btn.sec{background:var(--card);color:var(--ac);border:1px solid var(--ac)}
+#stato{margin:10px 0;font-size:15px;min-height:22px}
+#bar{height:6px;background:var(--sc);border-radius:3px;overflow:hidden;margin-bottom:14px}
+#bar i{display:block;height:100%;width:0;background:var(--ac);transition:width .2s}
+.griglia{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.card{background:var(--card);border-radius:12px;padding:8px;font-size:13px}
+.card img{width:100%;border-radius:8px;display:block;
+background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/16px 16px}
+.card button{margin-top:6px;width:100%;border:0;border-radius:8px;padding:9px;background:var(--ac);color:#fff;font-size:14px}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<h1>Senza sfondo</h1>
+<label class="btn" for="file">Scegli le foto</label>
+<input id="file" type="file" accept="image/*" multiple hidden>
+<button id="tutte" class="btn sec" hidden>Salva / condividi tutte</button>
+<div id="stato">Pronto. La prima volta scarica il modello (circa 40 MB), poi è più veloce.</div>
+<div id="bar"><i></i></div>
+<div class="griglia" id="griglia"></div>
+
+<script type="module">
+import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm";
+
+const MAX = 2048; // lato massimo: evita crash di memoria su iPhone
+const inp = document.getElementById("file");
+const stato = document.getElementById("stato");
+const barra = document.querySelector("#bar i");
+const griglia = document.getElementById("griglia");
+const tutte = document.getElementById("tutte");
+let risultati = [];
+
+async function ridimensiona(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * s);
+  c.height = Math.round(bmp.height * s);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return new Promise(r => c.toBlob(r, "image/jpeg", 0.95));
+}
+
+async function condividi(files) {
+  if (navigator.canShare && navigator.canShare({ files })) {
+    try { await navigator.share({ files }); } catch (e) {}
+  } else {
+    alert("Condivisione non disponibile: tieni premuta l’immagine e scegli Salva.");
+  }
+}
+
+inp.onchange = async () => {
+  const files = [...inp.files].filter(f => f.type.startsWith("image/"));
+  if (!files.length) return;
+  griglia.innerHTML = ""; risultati = []; tutte.hidden = true;
+  for (let i = 0; i < files.length; i++) {
+    const nome = files[i].name.replace(/\.[^.]+$/, "") + ".png";
+    stato.textContent = "Elaboro " + (i + 1) + " di " + files.length + "…";
+    barra.style.width = (i / files.length * 100) + "%";
+    try {
+      const piccola = await ridimensiona(files[i]);
+      const out = await removeBackground(piccola, {
+        model: "isnet_quint8",
+        output: { format: "image/png" },
+        progress: (k, cur, tot) => {
+          if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / tot * 100) + "%";
+        }
+      });
+      const file = new File([out], nome, { type: "image/png" });
+      risultati.push(file);
+      const url = URL.createObjectURL(out);
+      const c = document.createElement("div");
+      c.className = "card";
+      c.innerHTML = '<img src="' + url + '" alt="">';
+      const b = document.createElement("button");
+      b.textContent = "Salva";
+      b.onclick = () => condividi([file]);
+      c.appendChild(b);
+      griglia.appendChild(c);
+    } catch (e) {
+      const c = document.createElement("div");
+      c.className = "card";
+      c.textContent = "Errore su " + files[i].name;
+      griglia.appendChild(c);
+    }
+  }
+  barra.style.width = "100%";
+  stato.textContent = "Finito: " + risultati.length + " foto su " + files.length + ".";
+  tutte.hidden = risultati.length === 0;
+};
+tutte.onclick = () => condividi(risultati);
+</script>
+</body>
+</html>
