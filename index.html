@@ -5,181 +5,293 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Senza sfondo">
-<meta name="theme-color" content="#111111">
+<meta name="theme-color" content="#14102b">
 <title>Senza sfondo</title>
 <style>
-:root{--bg:#f6f6f4;--card:#fff;--tx:#222;--ac:#2a6df4;--sc:#ddd;--sc2:#fff}
-@media(prefers-color-scheme:dark){:root{--bg:#111;--card:#1c1c1e;--tx:#eee;--sc:#333;--sc2:#444}}
-*{box-sizing:border-box}
+:root{--bg:#f3f2fa;--card:#fff;--tx:#1b1838;--mut:#6d6a8a;--ac:#6c4cff;--ac2:#2ec5ff;--sc:#dcdaea;--sc2:#fff;--ln:#e4e2f2}
+@media(prefers-color-scheme:dark){:root{--bg:#14102b;--card:#201b44;--tx:#f1efff;--mut:#a29fc4;--sc:#2c2757;--sc2:#383268;--ln:#322d5e}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 body{margin:0;font-family:-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--tx);
-padding:calc(16px + env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom))}
-h1{font-size:24px;margin:0 0 14px}
-.btn{display:block;width:100%;background:var(--ac);color:#fff;border:0;border-radius:12px;padding:15px;
-font-size:17px;font-weight:600;text-align:center;margin-bottom:10px}
-.btn.sec{background:var(--card);color:var(--ac);border:1px solid var(--ac)}
-select{width:100%;padding:12px;border-radius:10px;font-size:16px;margin-bottom:10px;background:var(--card);color:var(--tx);border:1px solid var(--sc)}
-#stato{margin:10px 0;font-size:15px;min-height:22px}
-#bar{height:6px;background:var(--sc);border-radius:3px;overflow:hidden;margin-bottom:14px}
-#bar i{display:block;height:100%;width:0;background:var(--ac);transition:width .2s}
+padding:calc(14px + env(safe-area-inset-top)) 14px calc(110px + env(safe-area-inset-bottom));max-width:720px;margin:0 auto}
+header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.logo{width:46px;height:46px;border-radius:14px;background:linear-gradient(135deg,var(--ac),var(--ac2));display:grid;place-items:center;font-size:24px;color:#fff;box-shadow:0 6px 16px rgba(108,76,255,.35)}
+h1{font-size:23px;margin:0;line-height:1.1}
+header p{margin:2px 0 0;font-size:13px;color:var(--mut)}
+#drop{display:block;text-align:center;padding:26px 14px;border-radius:18px;color:#fff;cursor:pointer;
+background:linear-gradient(135deg,var(--ac),var(--ac2));box-shadow:0 10px 24px rgba(108,76,255,.3);margin-bottom:14px}
+#drop.su{filter:brightness(1.15)}
+#drop b{display:block;font-size:19px}#drop span{font-size:13px;opacity:.9}
+.panel{background:var(--card);border-radius:16px;padding:6px 14px;margin-bottom:12px;border:1px solid var(--ln)}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--ln);font-size:14px}
+.row:last-child{border:0}.row>span{color:var(--mut);flex:0 0 auto}
+select{flex:1;min-width:0;padding:9px;border-radius:10px;font-size:14px;background:var(--bg);color:var(--tx);border:1px solid var(--ln)}
+.seg{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.seg button{border:0;border-radius:9px;padding:8px 10px;font-size:13px;background:var(--bg);color:var(--tx)}
+.seg button.on{background:var(--ac);color:#fff}
+input[type=color]{width:38px;height:34px;border:0;border-radius:9px;padding:0;background:none}
+input[type=range]{flex:1}input[type=checkbox]{width:22px;height:22px;accent-color:var(--ac)}
+#stato{font-size:14px;min-height:20px;margin:8px 2px 6px}#stato a,#stato button{color:var(--ac);font-weight:700;background:none;border:0;font-size:14px;padding:0}
+#bar{height:6px;background:var(--sc);border-radius:3px;overflow:hidden;margin-bottom:12px}
+#bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2));transition:width .25s}
+#tools{display:flex;gap:6px;margin-bottom:10px}
+#tools button{flex:1;border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:10px;padding:9px;font-size:13px}
 .griglia{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
-.card{background:var(--card);border-radius:12px;padding:8px;font-size:13px}
-.card img{width:100%;border-radius:8px;display:block;
-background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/16px 16px}
-.card .r{display:flex;gap:6px;margin-top:6px}
-.card button{flex:1;border:0;border-radius:8px;padding:10px;background:var(--ac);color:#fff;font-size:14px}
-.card button.g{background:var(--sc);color:var(--tx)}
-#ed{position:fixed;inset:0;background:var(--bg);z-index:9;display:flex;flex-direction:column;
-padding:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom))}
+@media(min-width:560px){.griglia{grid-template-columns:repeat(3,1fr)}}
+.card{position:relative;background:var(--card);border-radius:14px;padding:7px;border:1px solid var(--ln)}
+.card canvas{width:100%;display:block;border-radius:9px;background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/14px 14px}
+.card .chk{position:absolute;top:12px;left:12px}.card .x{position:absolute;top:10px;right:10px;border:0;border-radius:50%;width:26px;height:26px;background:rgba(0,0,0,.55);color:#fff}
+.card .r{display:flex;gap:6px;margin-top:7px}
+.card .r button{flex:1;border:0;border-radius:9px;padding:10px 4px;font-size:14px;background:var(--ac);color:#fff}
+.card .r button.g{background:var(--bg);color:var(--tx)}
+.msg{display:none;text-align:center;padding:34px 6px;font-size:13px;color:var(--mut)}
+.card.wait canvas,.card.wait .r,.card.wait .chk,.card.err canvas,.card.err .r,.card.err .chk{display:none}
+.card.wait .msg,.card.err .msg{display:block}
+#azioni{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 auto}
+#azioni button{flex:1;border:0;border-radius:12px;padding:14px 6px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--ac),var(--ac2))}
+#azioni button:disabled{opacity:.4}#azioni button.g{background:var(--bg);color:var(--tx)}
+#ed{position:fixed;inset:0;background:var(--bg);z-index:9;display:flex;flex-direction:column;padding:calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom))}
 #area{flex:1;overflow:auto;border-radius:10px;background:#888}
-#cv{display:block;width:100%;touch-action:none;
-background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/16px 16px}
+#cv{display:block;width:100%;touch-action:none;background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/16px 16px}
 .tb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-.tb button{flex:1;min-width:70px;border:0;border-radius:8px;padding:11px 6px;background:var(--card);color:var(--tx);font-size:14px}
-.tb button.on{background:var(--ac);color:#fff}
-.tb label{flex:1 1 45%;font-size:12px}
-.tb input{width:100%}
+.tb button{flex:1;min-width:70px;border:0;border-radius:9px;padding:12px 6px;background:var(--card);color:var(--tx);font-size:14px}
+.tb button.on{background:var(--ac);color:#fff}.tb label{flex:1 1 45%;font-size:12px;color:var(--mut)}.tb input{width:100%}
 [hidden]{display:none!important}
 </style>
 </head>
 <body>
-<h1>Senza sfondo</h1>
-<select id="q">
-<option value="isnet_quint8">Veloce (meno preciso)</option>
-<option value="isnet_fp16" selected>Alta qualità (consigliato)</option>
-<option value="isnet">Massima (lento, può non funzionare su iPhone vecchi)</option>
-</select>
-<label class="btn" for="file">Scegli le foto</label>
+<header><div class="logo">✂</div><div><h1>Senza sfondo</h1><p>Foto prodotto pronte per i tuoi video</p></div></header>
+
+<label id="drop" for="file"><b>＋ Aggiungi foto</b><span>Scegline quante vuoi, puoi aggiungerne altre in qualsiasi momento</span></label>
 <input id="file" type="file" accept="image/*" multiple hidden>
-<button id="tutte" class="btn sec" hidden>Salva / condividi tutte</button>
+
+<div class="panel">
+<div class="row"><span>Qualità</span><select id="q">
+<option value="isnet_quint8">Veloce</option>
+<option value="isnet_fp16" selected>Alta qualità</option>
+<option value="isnet">Massima (lenta)</option></select></div>
+<div class="row"><span>Sfondo</span><div class="seg" id="sBg">
+<button class="on" data-v="t">Trasparente</button><button data-v="#ffffff">Bianco</button><button data-v="#000000">Nero</button>
+<input type="color" id="colr" value="#e8f0ff" title="Colore a scelta"></div></div>
+<div class="row"><span>Formato</span><div class="seg" id="sFm">
+<button class="on" data-v="0">Originale</button><button data-v="1">1:1</button><button data-v="0.5625">9:16</button><button data-v="1.7778">16:9</button></div></div>
+<div class="row"><span>Ritaglia sul prodotto</span><input type="checkbox" id="crop" checked></div>
+<div class="row"><span>Margine</span><input type="range" id="mg" min="0" max="30" value="6"></div>
+<div class="row"><span>Ombra morbida</span><input type="checkbox" id="ombra"></div>
+</div>
+
 <div id="stato">Pronto. La prima volta scarica il modello, poi è più veloce.</div>
 <div id="bar"><i></i></div>
+<div id="tools" hidden><button id="selAll">Seleziona tutte</button><button id="selNo">Nessuna</button><button id="svuota">Svuota</button></div>
 <div class="griglia" id="griglia"></div>
+
+<div id="azioni" hidden>
+<button id="zip" class="g">Scarica ZIP</button>
+<button id="share">Salva in Foto</button>
+</div>
 
 <div id="ed" hidden>
 <div id="area"><canvas id="cv"></canvas></div>
-<div class="tb">
-<button id="mC" class="on">Cancella</button>
-<button id="mR">Ripristina</button>
-<button id="mS">Sposta</button>
-</div>
-<div class="tb">
-<label>Pennello<input id="sz" type="range" min="4" max="80" value="24"></label>
-<label>Zoom<input id="zm" type="range" min="1" max="4" step="0.1" value="1"></label>
-</div>
-<div class="tb">
-<button id="ann">Annulla modifiche</button>
-<button id="fine" class="on">Fine</button>
-</div>
+<div class="tb"><button id="mC" class="on">Cancella</button><button id="mR">Ripristina</button><button id="mS">Sposta</button></div>
+<div class="tb"><label>Pennello<input id="sz" type="range" min="4" max="80" value="24"></label>
+<label>Zoom<input id="zm" type="range" min="1" max="4" step="0.1" value="1"></label></div>
+<div class="tb"><button id="ann">Annulla modifiche</button><button id="fine" class="on">Fine</button></div>
 </div>
 
 <script type="module">
 import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm";
 
-const MAX = 2048;
-const $ = id => document.getElementById(id);
-const stato = $("stato"), barra = document.querySelector("#bar i"), griglia = $("griglia"), tutte = $("tutte");
-let items = [];
+const MAX = 2048, $ = id => document.getElementById(id);
+const stato = $("stato"), barra = document.querySelector("#bar i"), griglia = $("griglia");
+let items = [], coda = [], lavorando = false, tot = 0, fatte = 0, rt;
+const O = { bg: "t", fm: 0, crop: true, mg: 6, sh: false };
+const toBlob = (c, t, q) => new Promise(r => c.toBlob(r, t, q));
 
 async function ridimensiona(file) {
   const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
   const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
   const c = document.createElement("canvas");
   c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
-  bmp.close();
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
   return c;
 }
-const toBlob = (c, t, q) => new Promise(r => c.toBlob(r, t, q));
 
-async function condividi(files) {
-  if (navigator.canShare && navigator.canShare({ files })) {
-    try { await navigator.share({ files }); } catch (e) {}
-  } else alert("Condivisione non disponibile: tieni premuta l’immagine e scegli Salva.");
+// ---- composizione finale (ritaglio, formato, sfondo, ombra) ----
+function bbox(it) {
+  if (it.bb) return it.bb;
+  const W = it.res.width, H = it.res.height, s = Math.min(1, 400 / Math.max(W, H));
+  const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(W * s)); c.height = Math.max(1, Math.round(H * s));
+  const x = c.getContext("2d"); x.drawImage(it.res, 0, 0, c.width, c.height);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  let a = c.width, b = c.height, e = -1, f = -1;
+  for (let y = 0; y < c.height; y++) for (let i = 0; i < c.width; i++)
+    if (d[(y * c.width + i) * 4 + 3] > 12) { if (i < a) a = i; if (i > e) e = i; if (y < b) b = y; if (y > f) f = y; }
+  if (e < 0) return it.bb = { x: 0, y: 0, w: W, h: H };
+  const px = Math.max(0, Math.floor(a / s) - 1), py = Math.max(0, Math.floor(b / s) - 1);
+  return it.bb = { x: px, y: py, w: Math.min(W - px, Math.ceil((e + 1) / s) + 1 - px), h: Math.min(H - py, Math.ceil((f + 1) / s) + 1 - py) };
 }
-async function aggiorna(it) {
-  const blob = await toBlob(it.res, "image/png");
-  it.file = new File([blob], it.nome, { type: "image/png" });
-  it.img.src = URL.createObjectURL(blob);
+function compose(it, L) {
+  const r = O.crop ? bbox(it) : { x: 0, y: 0, w: it.res.width, h: it.res.height };
+  const m = O.mg / 100 * Math.max(r.w, r.h);
+  let W = r.w + 2 * m, H = r.h + 2 * m;
+  if (O.fm) { if (W / H > O.fm) H = W / O.fm; else W = H * O.fm; }
+  const k = (L || (O.fm ? 1920 : Math.min(2048, Math.max(W, H)))) / Math.max(W, H);
+  const c = document.createElement("canvas"); c.width = Math.round(W * k); c.height = Math.round(H * k);
+  const x = c.getContext("2d");
+  if (O.bg !== "t") { x.fillStyle = O.bg; x.fillRect(0, 0, c.width, c.height); }
+  if (O.sh) { const bl = Math.max(c.width, c.height) * 0.03; x.shadowColor = "rgba(0,0,0,.38)"; x.shadowBlur = bl; x.shadowOffsetY = bl * 0.6; }
+  const dw = r.w * k, dh = r.h * k;
+  x.drawImage(it.res, r.x, r.y, r.w, r.h, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  return c;
 }
+function paint(it) {
+  if (!it.ok) return;
+  const c = compose(it, 480); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0);
+}
+const rip = () => { cancelAnimationFrame(rt); rt = requestAnimationFrame(() => items.forEach(paint)); };
 
-$("file").onchange = async e => {
-  const files = [...e.target.files].filter(f => f.type.startsWith("image/"));
-  if (!files.length) return;
-  griglia.innerHTML = ""; items = []; tutte.hidden = true;
-  for (let i = 0; i < files.length; i++) {
-    const nome = files[i].name.replace(/\.[^.]+$/, "") + ".png";
-    stato.textContent = "Elaboro " + (i + 1) + " di " + files.length + "…";
-    barra.style.width = (i / files.length * 100) + "%";
+// ---- impostazioni ----
+function seg(id, fn) {
+  const el = $(id);
+  el.onclick = e => { const b = e.target.closest("button"); if (!b) return;
+    el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); fn(b.dataset.v); };
+}
+seg("sBg", v => { O.bg = v; rip(); });
+$("colr").oninput = e => { O.bg = e.target.value; $("sBg").querySelectorAll("button").forEach(x => x.classList.remove("on")); rip(); };
+seg("sFm", v => { O.fm = parseFloat(v); rip(); });
+$("crop").onchange = e => { O.crop = e.target.checked; rip(); };
+$("mg").oninput = e => { O.mg = +e.target.value; rip(); };
+$("ombra").onchange = e => { O.sh = e.target.checked; rip(); };
+
+// ---- coda foto ----
+function creaCard(it) {
+  const c = document.createElement("div"); c.className = "card wait"; it.el = c;
+  c.innerHTML = '<label class="chk"><input type="checkbox" checked></label><button class="x">✕</button><div class="msg">In attesa…</div><canvas></canvas><div class="r"><button class="g">Ritocca</button><button>Salva</button></div>';
+  it.cv = c.querySelector("canvas");
+  c.querySelector("input").onchange = e => { it.sel = e.target.checked; conta(); };
+  c.querySelector(".x").onclick = () => { it.rimossa = true; items = items.filter(i => i !== it); c.remove(); conta(); };
+  const bs = c.querySelectorAll(".r button");
+  bs[0].onclick = () => apri(it);
+  bs[1].onclick = async () => condividi(await files([it]));
+  griglia.appendChild(c);
+}
+function aggiungi(list) {
+  list = [...list].filter(f => f.type.startsWith("image/")); if (!list.length) return;
+  for (const f of list) {
+    const it = { file: f, nome: f.name.replace(/\.[^.]+$/, "") || "foto", sel: true, ok: false };
+    creaCard(it); items.push(it); coda.push(it); tot++;
+  }
+  $("tools").hidden = false; conta(); processa();
+}
+async function processa() {
+  if (lavorando) return; lavorando = true;
+  while (coda.length) {
+    const it = coda.shift();
+    if (it.rimossa) { fatte++; continue; }
+    stato.textContent = "Elaboro " + (fatte + 1) + " di " + tot + "…";
+    barra.style.width = (fatte / tot * 100) + "%";
+    it.el.querySelector(".msg").textContent = "Elaboro…";
     try {
-      const orig = await ridimensiona(files[i]);
+      const orig = await ridimensiona(it.file);
       const out = await removeBackground(await toBlob(orig, "image/jpeg", 0.95), {
-        model: $("q").value,
-        output: { format: "image/png" },
-        progress: (k, cur, tot) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / tot * 100) + "%"; }
+        model: $("q").value, output: { format: "image/png" },
+        progress: (k, cur, t) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / t * 100) + "%"; }
       });
       const bmp = await createImageBitmap(out);
-      const res = document.createElement("canvas");
-      res.width = bmp.width; res.height = bmp.height;
-      res.getContext("2d").drawImage(bmp, 0, 0);
-      const base = document.createElement("canvas");
-      base.width = res.width; base.height = res.height;
-      base.getContext("2d").drawImage(res, 0, 0);
-      const it = { nome, orig, res, base };
-      const c = document.createElement("div"); c.className = "card";
-      it.img = document.createElement("img"); c.appendChild(it.img);
-      const r = document.createElement("div"); r.className = "r";
-      const b1 = document.createElement("button"); b1.className = "g"; b1.textContent = "Ritocca"; b1.onclick = () => apri(it);
-      const b2 = document.createElement("button"); b2.textContent = "Salva"; b2.onclick = () => condividi([it.file]);
-      r.append(b1, b2); c.appendChild(r); griglia.appendChild(c);
-      await aggiorna(it); items.push(it);
-    } catch (err) {
-      const c = document.createElement("div"); c.className = "card";
-      c.textContent = "Errore su " + files[i].name + ". Prova il modello Veloce."; griglia.appendChild(c);
+      it.res = document.createElement("canvas"); it.res.width = bmp.width; it.res.height = bmp.height;
+      it.res.getContext("2d").drawImage(bmp, 0, 0);
+      it.base = document.createElement("canvas"); it.base.width = bmp.width; it.base.height = bmp.height;
+      it.base.getContext("2d").drawImage(it.res, 0, 0);
+      it.orig = orig; it.ok = true; it.el.classList.remove("wait"); paint(it);
+    } catch (e) {
+      it.el.classList.remove("wait"); it.el.classList.add("err");
+      it.el.querySelector(".msg").textContent = "Errore su " + it.nome + ". Prova la qualità Veloce.";
     }
+    fatte++; conta();
   }
   barra.style.width = "100%";
-  stato.textContent = "Finito: " + items.length + " foto su " + files.length + ". Tocca Ritocca per sistemare i bordi.";
-  tutte.hidden = items.length === 0;
-};
-tutte.onclick = () => condividi(items.map(i => i.file));
+  stato.textContent = "Finito: " + items.filter(i => i.ok).length + " foto pronte. Tocca Ritocca per sistemare i bordi.";
+  tot = 0; fatte = 0; lavorando = false;
+}
+function conta() {
+  const n = items.filter(i => i.ok && i.sel).length;
+  $("zip").textContent = "Scarica ZIP (" + n + ")"; $("share").textContent = "Salva in Foto (" + n + ")";
+  $("zip").disabled = $("share").disabled = n === 0;
+  $("azioni").hidden = !items.some(i => i.ok); $("tools").hidden = items.length === 0;
+}
+$("file").onchange = e => { aggiungi(e.target.files); e.target.value = ""; };
+const dz = $("drop");
+dz.ondragover = e => { e.preventDefault(); dz.classList.add("su"); };
+dz.ondragleave = () => dz.classList.remove("su");
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove("su"); aggiungi(e.dataTransfer.files); };
+const setSel = v => { items.forEach(i => { i.sel = v; i.el.querySelector("input").checked = v; }); conta(); };
+$("selAll").onclick = () => setSel(true); $("selNo").onclick = () => setSel(false);
+$("svuota").onclick = () => { if (!confirm("Rimuovere tutte le foto?")) return; items.forEach(i => i.rimossa = true); items = []; griglia.innerHTML = ""; conta(); };
 
-// ---- Ritocco ----
+// ---- salvataggio ----
+function nomi(list) {
+  const m = {};
+  return list.map(i => { const n = i.nome + "-senza-sfondo"; m[n] = (m[n] || 0) + 1; return m[n] > 1 ? n + "-" + m[n] + ".png" : n + ".png"; });
+}
+async function files(list) {
+  const nm = nomi(list), out = [];
+  for (let k = 0; k < list.length; k++)
+    out.push(new File([await toBlob(compose(list[k], null), "image/png")], nm[k], { type: "image/png" }));
+  return out;
+}
+async function condividi(fl) {
+  if (!(navigator.canShare && navigator.canShare({ files: fl }))) { alert("Condivisione non disponibile: usa Scarica ZIP."); return; }
+  try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; }
+  catch (e) {
+    if (e.name === "AbortError") return;
+    stato.innerHTML = '<button id="rit">Tocca qui per aprire il salvataggio (' + fl.length + ' foto pronte)</button>';
+    $("rit").onclick = () => navigator.share({ files: fl }).catch(() => {});
+  }
+}
+$("share").onclick = async () => {
+  const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
+  stato.textContent = "Preparo " + sel.length + " foto…"; condividi(await files(sel));
+};
+$("zip").onclick = async () => {
+  const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
+  stato.textContent = "Preparo lo ZIP…";
+  const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
+  const z = new JSZip(); for (const f of await files(sel)) z.file(f.name, f);
+  const url = URL.createObjectURL(await z.generateAsync({ type: "blob" }));
+  stato.innerHTML = '<a href="' + url + '" download="foto-senza-sfondo.zip">Tocca qui per scaricare lo ZIP (' + sel.length + ' foto)</a>';
+  const a = document.createElement("a"); a.href = url; a.download = "foto-senza-sfondo.zip"; a.click();
+};
+
+// ---- ritocco ----
 const cv = $("cv"), ctx = cv.getContext("2d");
 let cur = null, modo = "C", giu = false, ultimo = null;
-function modoSet(m) {
-  modo = m;
-  ["C", "R", "S"].forEach(k => $("m" + k).classList.toggle("on", k === m));
-  cv.style.touchAction = m === "S" ? "auto" : "none";
-}
+function modoSet(m) { modo = m; ["C", "R", "S"].forEach(k => $("m" + k).classList.toggle("on", k === m)); cv.style.touchAction = m === "S" ? "auto" : "none"; }
 $("mC").onclick = () => modoSet("C"); $("mR").onclick = () => modoSet("R"); $("mS").onclick = () => modoSet("S");
 $("zm").oninput = e => { cv.style.width = (e.target.value * 100) + "%"; };
 function apri(it) {
-  cur = it; cv.width = it.res.width; cv.height = it.res.height;
+  if (!it.ok) return; cur = it; cv.width = it.res.width; cv.height = it.res.height;
   ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(it.res, 0, 0);
   cv.style.width = "100%"; $("zm").value = 1; modoSet("C"); $("ed").hidden = false;
 }
-function punto(e) {
-  const r = cv.getBoundingClientRect(), s = cv.width / r.width;
-  return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s, s };
-}
+function punto(e) { const r = cv.getBoundingClientRect(), s = cv.width / r.width; return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }; }
+const raggio = () => $("sz").value * (cv.width / 1000);
 function pennella(p) {
-  const rad = $("sz").value * (cv.width / 1000);
-  ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, rad, 0, 7); 
+  ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, raggio(), 0, 7);
   if (modo === "C") { ctx.globalCompositeOperation = "destination-out"; ctx.fill(); }
   else { ctx.clip(); ctx.drawImage(cur.orig, 0, 0, cv.width, cv.height); }
   ctx.restore();
 }
 function tratto(a, b) {
-  const d = Math.hypot(b.x - a.x, b.y - a.y), passo = Math.max(1, $("sz").value * (cv.width / 1000) / 3);
+  const d = Math.hypot(b.x - a.x, b.y - a.y), passo = Math.max(1, raggio() / 3);
   for (let t = 0; t <= d; t += passo) pennella({ x: a.x + (b.x - a.x) * t / (d || 1), y: a.y + (b.y - a.y) * t / (d || 1) });
 }
 cv.onpointerdown = e => { if (modo === "S") return; giu = true; cv.setPointerCapture(e.pointerId); ultimo = punto(e); pennella(ultimo); };
 cv.onpointermove = e => { if (!giu) return; const p = punto(e); tratto(ultimo, p); ultimo = p; };
 cv.onpointerup = cv.onpointercancel = () => { giu = false; };
-$("ann").onclick = () => { cur.res.getContext("2d").clearRect(0, 0, cur.res.width, cur.res.height); cur.res.getContext("2d").drawImage(cur.base, 0, 0); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(cur.base, 0, 0); };
-$("fine").onclick = async () => {
+$("ann").onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(cur.base, 0, 0); };
+$("fine").onclick = () => {
   const x = cur.res.getContext("2d"); x.clearRect(0, 0, cur.res.width, cur.res.height); x.drawImage(cv, 0, 0);
-  await aggiorna(cur); $("ed").hidden = true;
+  cur.bb = null; paint(cur); $("ed").hidden = true;
 };
 </script>
 </body>
