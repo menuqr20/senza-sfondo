@@ -44,8 +44,8 @@ input[type=range]{flex:1}input[type=checkbox]{width:22px;height:22px;accent-colo
 .card .r button{flex:1;border:0;border-radius:9px;padding:10px 4px;font-size:14px;background:var(--ac);color:#fff}
 .card .r button.g{background:var(--bg);color:var(--tx)}
 .msg{display:none;text-align:center;padding:34px 6px;font-size:13px;color:var(--mut)}
-.card.wait canvas,.card.wait .r,.card.wait .chk,.card.err canvas,.card.err .r,.card.err .chk{display:none}
-.card.wait .msg,.card.err .msg{display:block}
+.card.wait canvas,.card.wait .r,.card.wait .chk{display:none}.card.err{display:none}
+.card.wait .msg{display:block}
 #azioni{position:fixed;left:0;right:0;bottom:0;display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom));
 background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 auto}
 #azioni button{flex:1;border:0;border-radius:12px;padding:14px 6px;font-size:15px;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--ac),var(--ac2))}
@@ -56,6 +56,8 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 .tb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .tb button{flex:1;min-width:70px;border:0;border-radius:9px;padding:12px 6px;background:var(--card);color:var(--tx);font-size:14px}
 .tb button.on{background:var(--ac);color:#fff}.tb label{flex:1 1 45%;font-size:12px;color:var(--mut)}.tb input{width:100%}
+.lr{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--ln)}.lr img{width:56px;height:56px;object-fit:cover;border-radius:8px;background:var(--sc)}.lr div{flex:1;min-width:0;font-size:13px}.lr small{color:var(--mut)}.lr button{border:0;border-radius:8px;padding:9px 12px;background:var(--ac);color:#fff;font-size:13px}
+#log{border-color:#e5484d}
 .nm{font-size:11px;color:var(--mut);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card.sv::after{content:"✓ salvata";position:absolute;top:12px;left:44px;background:#1fa971;color:#fff;font-size:11px;padding:2px 7px;border-radius:8px}
 [hidden]{display:none!important}
 </style>
@@ -83,7 +85,9 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 
 <div id="stato">Pronto. La prima volta scarica il modello, poi è più veloce.</div>
 <div id="bar"><i></i></div>
-<div id="tools" hidden><button id="selAll">Seleziona tutte</button><button id="selNo">Nessuna</button><button id="svuota">Svuota</button><button id="retry" hidden>Riprova errori</button><button id="elim" hidden>Elimina salvate</button><button id="azz">Azzera elenco salvate</button></div>
+<div id="tools" hidden><button id="selAll">Seleziona tutte</button><button id="selNo">Nessuna</button><button id="svuota">Svuota</button><button id="elim" hidden>Elimina salvate</button><button id="azz">Dimentica elenco foto fatte</button></div>
+<div id="spazio" style="font-size:12px;color:var(--mut);margin:0 2px 10px"></div>
+<div class="panel" id="log" hidden><div class="row"><b id="logT">Log errori</b><button id="retry" class="btn" style="width:auto;margin:0;padding:9px 14px;font-size:13px">Riprova tutti</button></div><div id="logL"></div></div>
 <div class="griglia" id="griglia"></div>
 
 <div id="azioni" hidden>
@@ -105,21 +109,23 @@ import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background
 const MAX = 2048, PART = 25, $ = id => document.getElementById(id);
 const stato = $("stato"), barra = document.querySelector("#bar i"), griglia = $("griglia");
 let items = [], coda = [], lavorando = false, tot = 0, fatte = 0, rt, nota = "";
+const perChiave = new Map();
 const O = { bg: "t", fm: 0, crop: true, mg: 6, sh: false };
-let salvate = new Set(); try { salvate = new Set(JSON.parse(localStorage.getItem("salvate") || "[]")); } catch (e) {}
-const memorizza = () => { try { localStorage.setItem("salvate", JSON.stringify([...salvate])); } catch (e) {} };
+let fatti = new Set();
+try { fatti = new Set([...JSON.parse(localStorage.getItem("fatti") || "[]"), ...JSON.parse(localStorage.getItem("salvate") || "[]")]); } catch (e) {}
+const memFatti = () => { try { localStorage.setItem("fatti", JSON.stringify([...fatti])); } catch (e) {} };
 const toBlob = (c, t, q) => new Promise(r => c.toBlob(r, t, q));
 const cvNuovo = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 const scarta = c => { if (c) { c.width = 1; c.height = 1; } };
 async function daBlob(b) { const m = await createImageBitmap(b); const c = cvNuovo(m.width, m.height); c.getContext("2d").drawImage(m, 0, 0); m.close(); return c; }
-async function ridimensiona(file) {
+async function ridimensiona(file, max) {
   const m = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const s = Math.min(1, MAX / Math.max(m.width, m.height));
-  const c = cvNuovo(Math.round(m.width * s), Math.round(m.height * s));
+  const s = Math.min(1, max / Math.max(m.width, m.height));
+  const c = cvNuovo(Math.max(1, Math.round(m.width * s)), Math.max(1, Math.round(m.height * s)));
   c.getContext("2d").drawImage(m, 0, 0, c.width, c.height); m.close(); return c;
 }
-function piccola(c) {
-  const s = Math.min(1, 700 / Math.max(c.width, c.height));
+function piccola(c, max) {
+  const s = Math.min(1, max / Math.max(c.width, c.height));
   const p = cvNuovo(Math.max(1, Math.round(c.width * s)), Math.max(1, Math.round(c.height * s)));
   p.getContext("2d").drawImage(c, 0, 0, p.width, p.height); return p;
 }
@@ -132,6 +138,21 @@ function calcBB(c) {
   a = Math.max(0, a - 1); b = Math.max(0, b - 1); e = Math.min(W - 1, e + 1); f = Math.min(H - 1, f + 1);
   return { x: a / W, y: b / H, w: (e + 1 - a) / W, h: (f + 1 - b) / H };
 }
+
+// ---- memoria interna (IndexedDB) ----
+let db = null; const mem = new Map();
+const dbAp = () => new Promise((ok, ko) => { const r = indexedDB.open("senzasfondo", 1); r.onupgradeneeded = () => r.result.createObjectStore("foto", { keyPath: "chiave" }); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
+const tx = (m, f) => new Promise((ok, ko) => { const t = db.transaction("foto", m), r = f(t.objectStore("foto")); t.oncomplete = () => ok(r && r.result); t.onerror = t.onabort = () => ko(t.error); });
+const dbPut = async r => { if (!db) { mem.set(r.chiave, r); return; } return tx("readwrite", s => s.put(r)); };
+const dbGet = async k => db ? tx("readonly", s => s.get(k)) : mem.get(k);
+const dbDel = async k => { if (!db) { mem.delete(k); return; } return tx("readwrite", s => s.delete(k)); };
+const dbTutti = async () => db ? tx("readonly", s => s.getAll()) : [...mem.values()];
+async function spazio() {
+  try { const e = await navigator.storage.estimate();
+    $("spazio").textContent = "Memoria dell’app: " + Math.round(e.usage / 1048576) + " MB usati" + (e.quota ? " su circa " + Math.round(e.quota / 1048576) + " MB" : "") + (db ? "" : " · salvataggio automatico NON disponibile");
+  } catch (e) {}
+}
+
 function compose(it, L, src) {
   const SW = src.width, SH = src.height;
   const r = O.crop ? { x: it.bb.x * SW, y: it.bb.y * SH, w: it.bb.w * SW, h: it.bb.h * SH } : { x: 0, y: 0, w: SW, h: SH };
@@ -147,8 +168,8 @@ function compose(it, L, src) {
   return c;
 }
 function paint(it) {
-  if (!it.ok) return;
-  const c = compose(it, 480, it.small); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0); scarta(c);
+  if (!it.ok || !it.small) return;
+  const c = compose(it, 400, it.small); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0); scarta(c);
 }
 const rip = () => { cancelAnimationFrame(rt); rt = requestAnimationFrame(() => items.forEach(paint)); };
 
@@ -164,29 +185,58 @@ $("crop").onchange = e => { O.crop = e.target.checked; rip(); };
 $("mg").oninput = e => { O.mg = +e.target.value; rip(); };
 $("ombra").onchange = e => { O.sh = e.target.checked; rip(); };
 
-// ---- coda ----
+// ---- schede, log errori ----
 function creaCard(it) {
   const c = document.createElement("div"); c.className = "card wait"; it.el = c;
   c.innerHTML = '<label class="chk"><input type="checkbox" checked></label><button class="x">✕</button><div class="msg">In attesa…</div><canvas></canvas><div class="nm"></div><div class="r"><button class="g">Ritocca</button><button>Salva</button></div>';
   it.cv = c.querySelector("canvas"); c.querySelector(".nm").textContent = it.nome;
   c.querySelector("input").onchange = e => { it.sel = e.target.checked; conta(); };
-  c.querySelector(".x").onclick = () => { it.rimossa = true; items = items.filter(i => i !== it); c.remove(); conta(); };
+  c.querySelector(".x").onclick = async () => {
+    it.rimossa = true; items = items.filter(i => i !== it); perChiave.delete(it.chiave); c.remove();
+    fatti.delete(it.chiave); memFatti(); try { await dbDel(it.chiave); } catch (e) {} conta();
+  };
   const bs = c.querySelectorAll(".r button");
   bs[0].onclick = () => apri(it);
   bs[1].onclick = () => condividi([it]);
-  griglia.appendChild(c);
+  griglia.appendChild(c); perChiave.set(it.chiave, it);
 }
+function requeue(it) {
+  it.err = false; it.ritentato = false; it.el.classList.remove("err"); it.el.classList.add("wait");
+  it.el.querySelector(".msg").textContent = "In attesa…"; coda.push(it); tot++;
+}
+function log() {
+  const er = items.filter(i => i.err); $("log").hidden = !er.length; $("logT").textContent = "Log errori (" + er.length + ")";
+  const L = $("logL"); L.innerHTML = "";
+  er.forEach(i => {
+    const r = document.createElement("div"); r.className = "lr";
+    r.innerHTML = '<img alt=""><div><b></b><br><small></small></div><button></button>';
+    const im = r.querySelector("img"); if (i.thumbUrl) im.src = i.thumbUrl; else im.style.display = "none";
+    r.querySelector("b").textContent = i.nome;
+    r.querySelector("small").textContent = (i.errMsg || "Errore") + (i.file ? "" : " · riseleziona la foto per riprovare");
+    const b = r.querySelector("button"); b.textContent = i.file ? "Riprova" : "Riseleziona";
+    b.onclick = () => { if (i.file) { requeue(i); conta(); processa(); } else $("file").click(); };
+    L.appendChild(r);
+  });
+}
+$("retry").onclick = () => {
+  const er = items.filter(i => i.err), con = er.filter(i => i.file);
+  con.forEach(requeue); conta(); if (con.length) processa();
+  if (er.length > con.length) alert("Per " + (er.length - con.length) + " foto devi riselezionare i file originali: l’app li riconosce da sola.");
+};
+
+// ---- coda ----
 function aggiungi(list) {
   list = [...list].filter(f => f.type.startsWith("image/")).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
   if (!list.length) return;
-  let saltate = 0;
+  let nuove = 0, gia = 0, rit = 0;
   for (const f of list) {
-    const k = f.name + "|" + f.size;
-    if (salvate.has(k) || items.some(i => i.chiave === k)) { saltate++; continue; }
+    const k = f.name + "|" + f.size, ex = perChiave.get(k);
+    if (ex) { if (ex.err) { ex.file = f; requeue(ex); rit++; } else gia++; continue; }
+    if (fatti.has(k)) { gia++; continue; }
     const it = { file: f, chiave: k, nome: f.name.replace(/\.[^.]+$/, "") || "foto", sel: true, ok: false };
-    creaCard(it); items.push(it); coda.push(it); tot++;
+    creaCard(it); items.push(it); coda.push(it); tot++; nuove++;
   }
-  nota = saltate ? " · " + saltate + " già presenti o già salvate: saltate" : "";
+  nota = " · " + nuove + " nuove, " + gia + " già fatte (saltate)" + (rit ? ", " + rit + " da riprovare" : "");
   conta(); if (!coda.length) riepilogo("Fatto"); processa();
 }
 function riepilogo(p) {
@@ -194,15 +244,25 @@ function riepilogo(p) {
   stato.textContent = p + ": " + ok + " pronte · " + coda.length + " in attesa · " + er + " errori" + nota;
 }
 async function elabora(it) {
-  const orig = await ridimensiona(it.file);
-  const inB = await toBlob(orig, "image/jpeg", 0.9); scarta(orig);
+  const orig = await ridimensiona(it.file, MAX);
+  const inB = await toBlob(orig, "image/jpeg", 0.95); scarta(orig);
   const out = await removeBackground(inB, {
     model: $("q").value, output: { format: "image/png" },
     progress: (k, cur, t) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / t * 100) + "%"; }
   });
-  const full = await daBlob(out);
-  it.origB = inB; it.resB = out; it.baseB = out; it.small = piccola(full); it.bb = calcBB(it.small); scarta(full);
-  it.ok = true; it.err = false; it.file = null;
+  const full = await daBlob(out), sm = piccola(full, 400), bb = calcBB(sm); scarta(full);
+  const smallB = await toBlob(sm, "image/png");
+  await dbPut({ chiave: it.chiave, nome: it.nome, stato: "ok", resB: out, origB: inB, smallB, bb, salvata: false, ts: Date.now() });
+  it.small = sm; it.bb = bb; it.ok = true; it.err = false; it.file = null; it.thumbUrl = ""; it.salvata = false;
+  fatti.add(it.chiave); memFatti();
+}
+async function fallita(it, e) {
+  it.err = true; it.errMsg = (e && e.name ? e.name : "Errore") + (e && e.message ? ": " + e.message : "") + (e && e.name === "QuotaExceededError" ? " (memoria piena: scarica ed elimina le foto salvate)" : "");
+  let thumbB = null;
+  try { if (it.file) { const c = await ridimensiona(it.file, 240); thumbB = await toBlob(c, "image/jpeg", 0.8); scarta(c); } } catch (_) {}
+  it.thumbUrl = thumbB ? URL.createObjectURL(thumbB) : "";
+  it.el.classList.remove("wait"); it.el.classList.add("err");
+  try { await dbPut({ chiave: it.chiave, nome: it.nome, stato: "err", errMsg: it.errMsg, thumbB, ts: Date.now() }); } catch (_) {}
 }
 async function processa() {
   if (lavorando) return; lavorando = true;
@@ -211,53 +271,70 @@ async function processa() {
     if (it.rimossa) { fatte++; continue; }
     barra.style.width = (fatte / Math.max(tot, 1) * 100) + "%"; riepilogo("Elaboro");
     it.el.classList.add("wait"); it.el.classList.remove("err"); it.el.querySelector(".msg").textContent = "Elaboro…";
-    try { await elabora(it); it.el.classList.remove("wait"); paint(it); }
+    try { await elabora(it); it.el.classList.remove("wait"); paint(it); spazio(); }
     catch (e) {
       if (!it.ritentato) { it.ritentato = true; it.el.querySelector(".msg").textContent = "Ritento…"; coda.push(it); tot++; }
-      else { it.el.classList.remove("wait"); it.err = true; it.el.classList.add("err"); it.el.querySelector(".msg").textContent = "Errore su " + it.nome; }
+      else await fallita(it, e);
     }
     fatte++; conta();
     await new Promise(r => setTimeout(r, 60));
   }
-  barra.style.width = "100%";
-  const er = items.filter(i => i.err).map(i => i.nome);
-  stato.textContent = "Finito: " + items.filter(i => i.ok).length + " pronte" +
-    (er.length ? " · " + er.length + " con errore (" + er.slice(0, 6).join(", ") + (er.length > 6 ? "…" : "") + "): tocca Riprova errori" : "") + nota;
+  barra.style.width = "100%"; const er = items.filter(i => i.err).length;
+  stato.textContent = "Finito: " + items.filter(i => i.ok).length + " pronte" + (er ? " · " + er + " con errore (vedi il log)" : "") + nota;
   tot = 0; fatte = 0; lavorando = false;
 }
 function conta() {
-  const n = items.filter(i => i.ok && i.sel).length, ne = items.filter(i => i.err).length;
+  const n = items.filter(i => i.ok && i.sel).length;
   $("zip").textContent = "Scarica ZIP (" + n + ")"; $("share").textContent = "Salva in Foto (" + n + ")";
   $("zip").disabled = $("share").disabled = n === 0;
   $("azioni").hidden = !items.some(i => i.ok); $("tools").hidden = items.length === 0;
-  $("retry").hidden = ne === 0; $("retry").textContent = "Riprova errori (" + ne + ")";
-  $("elim").hidden = !items.some(i => i.salvata);
+  $("elim").hidden = !items.some(i => i.salvata); log();
 }
-$("file").onchange = e => { aggiungi(e.target.files); e.target.value = ""; };
+let pronto = null;
+$("file").onchange = async e => { const l = [...e.target.files]; e.target.value = ""; await pronto; aggiungi(l); };
 const dz = $("drop");
 dz.ondragover = e => { e.preventDefault(); dz.classList.add("su"); };
 dz.ondragleave = () => dz.classList.remove("su");
-dz.ondrop = e => { e.preventDefault(); dz.classList.remove("su"); aggiungi(e.dataTransfer.files); };
+dz.ondrop = async e => { e.preventDefault(); dz.classList.remove("su"); await pronto; aggiungi(e.dataTransfer.files); };
 const setSel = v => { items.forEach(i => { i.sel = v; i.el.querySelector("input").checked = v; }); conta(); };
 $("selAll").onclick = () => setSel(true); $("selNo").onclick = () => setSel(false);
-$("svuota").onclick = () => { if (!confirm("Rimuovere tutte le foto?")) return; items.forEach(i => i.rimossa = true); items = []; griglia.innerHTML = ""; conta(); };
-$("retry").onclick = () => {
-  items.filter(i => i.err).forEach(i => { i.err = false; i.ritentato = false; i.el.classList.remove("err"); i.el.classList.add("wait"); i.el.querySelector(".msg").textContent = "In attesa…"; coda.push(i); tot++; });
-  conta(); processa();
+$("svuota").onclick = async () => {
+  if (!confirm("Rimuovere tutte le foto dall’app? Quelle non ancora scaricate andranno perse.")) return;
+  for (const i of items) { i.rimossa = true; try { await dbDel(i.chiave); } catch (e) {} }
+  items = []; perChiave.clear(); griglia.innerHTML = ""; conta(); spazio();
 };
-$("elim").onclick = () => {
-  items.filter(i => i.salvata).forEach(i => { i.rimossa = true; i.el.remove(); });
-  items = items.filter(i => !i.salvata); conta(); riepilogo("Fatto");
+$("elim").onclick = async () => {
+  for (const i of items.filter(i => i.salvata)) { i.rimossa = true; i.el.remove(); perChiave.delete(i.chiave); try { await dbDel(i.chiave); } catch (e) {} }
+  items = items.filter(i => !i.salvata); conta(); riepilogo("Fatto"); spazio();
 };
-$("azz").onclick = () => { salvate.clear(); memorizza(); alert("Elenco delle foto salvate azzerato."); };
+$("azz").onclick = () => { fatti.clear(); memFatti(); alert("Elenco azzerato: le foto già nell’app restano, ma quelle eliminate verranno rielaborate se le ricarichi."); };
 
-// ---- salvataggio ----
+// ---- ripristino all’avvio ----
+async function ripristina() {
+  try { db = await dbAp(); } catch (e) { db = null; }
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+  if (!db) { stato.textContent = "Attenzione: in questa modalità il salvataggio automatico non è disponibile. Scarica le foto man mano."; spazio(); return; }
+  const recs = (await dbTutti()).sort((a, b) => a.nome.localeCompare(b.nome, undefined, { numeric: true }));
+  let n = 0;
+  for (const r of recs) {
+    stato.textContent = "Ripristino le foto salvate… " + (++n) + " di " + recs.length;
+    const it = { chiave: r.chiave, nome: r.nome, sel: true, ok: r.stato === "ok", err: r.stato === "err", salvata: !!r.salvata, errMsg: r.errMsg };
+    creaCard(it); items.push(it); it.el.classList.remove("wait");
+    if (it.ok) { it.bb = r.bb; it.small = await daBlob(r.smallB); paint(it); if (it.salvata) it.el.classList.add("sv"); fatti.add(it.chiave); }
+    else { it.el.classList.add("err"); it.thumbUrl = r.thumbB ? URL.createObjectURL(r.thumbB) : ""; }
+  }
+  memFatti(); conta(); spazio();
+  stato.textContent = recs.length ? "Ripristinate " + recs.length + " foto salvate nell’app. Ricarica le 300 foto: quelle già fatte vengono saltate." : "Pronto. Ogni foto viene salvata nell’app appena è pronta.";
+}
+pronto = ripristina();
+
+// ---- salvataggio verso l’iPhone ----
 function nomi(list) {
   const m = {};
   return list.map(i => { const n = i.nome + "-senza-sfondo"; m[n] = (m[n] || 0) + 1; return m[n] > 1 ? n + "-" + m[n] + ".png" : n + ".png"; });
 }
 async function esporta(it) {
-  const full = await daBlob(it.resB), c = compose(it, null, full); scarta(full);
+  const rec = await dbGet(it.chiave), full = await daBlob(rec.resB), c = compose(it, null, full); scarta(full);
   const b = await toBlob(c, "image/png"); scarta(c); return b;
 }
 async function files(list) {
@@ -265,9 +342,12 @@ async function files(list) {
   for (let k = 0; k < list.length; k++) out.push(new File([await esporta(list[k])], nm[k], { type: "image/png" }));
   return out;
 }
-function segna(list) {
-  list.forEach(i => { i.salvata = true; i.el.classList.add("sv"); salvate.add(i.chiave); });
-  memorizza(); conta();
+async function segna(list) {
+  for (const i of list) {
+    i.salvata = true; i.el.classList.add("sv");
+    try { const r = await dbGet(i.chiave); if (r) { r.salvata = true; await dbPut(r); } } catch (e) {}
+  }
+  conta();
 }
 function mostra(fl) {
   const o = document.createElement("div");
@@ -336,15 +416,16 @@ $("zip").onclick = () => {
 
 // ---- ritocco ----
 const cv = $("cv"), ctx = cv.getContext("2d");
-let cur = null, curOrig = null, modo = "C", giu = false, ultimo = null;
+let cur = null, curOrig = null, curBase = null, modo = "C", giu = false, ultimo = null;
 function modoSet(m) { modo = m; ["C", "R", "S"].forEach(k => $("m" + k).classList.toggle("on", k === m)); cv.style.touchAction = m === "S" ? "auto" : "none"; }
 $("mC").onclick = () => modoSet("C"); $("mR").onclick = () => modoSet("R"); $("mS").onclick = () => modoSet("S");
 $("zm").oninput = e => { cv.style.width = (e.target.value * 100) + "%"; };
 async function apri(it) {
   if (!it.ok) return;
-  const full = await daBlob(it.resB); cv.width = full.width; cv.height = full.height;
+  const rec = await dbGet(it.chiave); if (!rec || !rec.resB) return;
+  const full = await daBlob(rec.resB); cv.width = full.width; cv.height = full.height;
   ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(full, 0, 0); scarta(full);
-  curOrig = await createImageBitmap(it.origB); cur = it;
+  curOrig = await createImageBitmap(rec.origB); curBase = rec.baseB || rec.resB; cur = it;
   cv.style.width = "100%"; $("zm").value = 1; modoSet("C"); $("ed").hidden = false;
 }
 function punto(e) { const r = cv.getBoundingClientRect(), s = cv.width / r.width; return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }; }
@@ -363,12 +444,15 @@ cv.onpointerdown = e => { if (modo === "S") return; giu = true; cv.setPointerCap
 cv.onpointermove = e => { if (!giu) return; const p = punto(e); tratto(ultimo, p); ultimo = p; };
 cv.onpointerup = cv.onpointercancel = () => { giu = false; };
 $("ann").onclick = async () => {
-  const m = await createImageBitmap(cur.baseB); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(m, 0, 0); m.close();
+  const m = await createImageBitmap(curBase); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(m, 0, 0); m.close();
 };
 $("fine").onclick = async () => {
-  cur.resB = await toBlob(cv, "image/png"); cur.small = piccola(cv); cur.bb = calcBB(cur.small);
-  cur.salvata = false; cur.el.classList.remove("sv"); salvate.delete(cur.chiave); memorizza();
-  paint(cur); if (curOrig) curOrig.close(); curOrig = null; cv.width = 1; cv.height = 1; $("ed").hidden = true; conta();
+  const rec = await dbGet(cur.chiave);
+  rec.baseB = rec.baseB || rec.resB; rec.resB = await toBlob(cv, "image/png");
+  const sm = piccola(cv, 400); rec.bb = calcBB(sm); rec.smallB = await toBlob(sm, "image/png"); rec.salvata = false;
+  await dbPut(rec);
+  cur.small = sm; cur.bb = rec.bb; cur.salvata = false; cur.el.classList.remove("sv"); paint(cur);
+  if (curOrig) curOrig.close(); curOrig = null; cv.width = 1; cv.height = 1; $("ed").hidden = true; conta(); spazio();
 };
 </script>
 </body>
