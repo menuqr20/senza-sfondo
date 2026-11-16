@@ -239,14 +239,45 @@ async function files(list) {
     out.push(new File([await toBlob(compose(list[k], null), "image/png")], nm[k], { type: "image/png" }));
   return out;
 }
+function mostra(fl) {
+  const o = document.createElement("div");
+  o.style.cssText = "position:fixed;inset:0;z-index:20;background:var(--bg);overflow:auto;padding:calc(14px + env(safe-area-inset-top)) 14px 40px";
+  o.innerHTML = '<p style="font-size:15px;line-height:1.4"><b>Salvataggio manuale.</b> Tieni premuta ogni immagine e scegli <b>Aggiungi a Foto</b> (oppure <b>Salva in Foto</b>).</p>';
+  fl.forEach(f => {
+    const i = document.createElement("img"); i.src = URL.createObjectURL(f);
+    i.style.cssText = "width:100%;display:block;margin:0 0 14px;border-radius:10px;background:repeating-conic-gradient(var(--sc) 0 25%,var(--sc2) 0 50%) 0 0/16px 16px";
+    o.appendChild(i);
+  });
+  const c = document.createElement("button"); c.textContent = "Chiudi";
+  c.style.cssText = "width:100%;padding:14px;border:0;border-radius:12px;background:var(--ac);color:#fff;font-size:16px;font-weight:700";
+  c.onclick = () => o.remove(); o.appendChild(c); document.body.appendChild(o);
+}
+function errore(e, fl) {
+  stato.textContent = "Il salvataggio diretto non è riuscito (" + e.name + (e.message ? ": " + e.message : "") + "). ";
+  const b = document.createElement("button"); b.textContent = "Salva tenendo premuta l’immagine";
+  b.onclick = () => mostra(fl); stato.appendChild(b);
+}
 async function condividi(fl) {
-  if (!(navigator.canShare && navigator.canShare({ files: fl }))) { alert("Condivisione non disponibile: usa Scarica ZIP."); return; }
-  try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; }
-  catch (e) {
-    if (e.name === "AbortError") return;
-    stato.innerHTML = '<button id="rit">Tocca qui per aprire il salvataggio (' + fl.length + ' foto pronte)</button>';
-    $("rit").onclick = () => navigator.share({ files: fl }).catch(() => {});
+  if (!navigator.share) { mostra(fl); return; }
+  const G = 4;
+  if (fl.length <= G) {
+    try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; }
+    catch (e) { if (e.name !== "AbortError") errore(e, fl); }
+    return;
   }
+  const gr = [];
+  for (let i = 0; i < fl.length; i += G) gr.push(fl.slice(i, i + G));
+  stato.innerHTML = "Foto pronte. Tocca un gruppo alla volta:";
+  gr.forEach((g, k) => {
+    const b = document.createElement("button");
+    b.style.cssText = "display:block;margin:8px 0;padding:12px;width:100%;border-radius:10px;background:var(--card);border:1px solid var(--ln)";
+    b.textContent = "Salva gruppo " + (k + 1) + " di " + gr.length + " (" + g.length + " foto)";
+    b.onclick = async () => {
+      try { await navigator.share({ files: g }); b.textContent = "✓ Gruppo " + (k + 1) + " fatto"; }
+      catch (e) { if (e.name !== "AbortError") { b.textContent = "Errore (" + e.name + "): tocca per il metodo manuale"; b.onclick = () => mostra(g); } }
+    };
+    stato.appendChild(b);
+  });
 }
 $("share").onclick = async () => {
   const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
