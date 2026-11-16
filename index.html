@@ -33,8 +33,8 @@ input[type=range]{flex:1}input[type=checkbox]{width:22px;height:22px;accent-colo
 #stato{font-size:14px;min-height:20px;margin:8px 2px 6px}#stato a,#stato button{color:var(--ac);font-weight:700;background:none;border:0;font-size:14px;padding:0}
 #bar{height:6px;background:var(--sc);border-radius:3px;overflow:hidden;margin-bottom:12px}
 #bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--ac),var(--ac2));transition:width .25s}
-#tools{display:flex;gap:6px;margin-bottom:10px}
-#tools button{flex:1;border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:10px;padding:9px;font-size:13px}
+#tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+#tools button{flex:1 1 30%;border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:10px;padding:9px;font-size:13px}
 .griglia{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 @media(min-width:560px){.griglia{grid-template-columns:repeat(3,1fr)}}
 .card{position:relative;background:var(--card);border-radius:14px;padding:7px;border:1px solid var(--ln)}
@@ -56,6 +56,7 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 .tb{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .tb button{flex:1;min-width:70px;border:0;border-radius:9px;padding:12px 6px;background:var(--card);color:var(--tx);font-size:14px}
 .tb button.on{background:var(--ac);color:#fff}.tb label{flex:1 1 45%;font-size:12px;color:var(--mut)}.tb input{width:100%}
+.nm{font-size:11px;color:var(--mut);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.card.sv::after{content:"✓ salvata";position:absolute;top:12px;left:44px;background:#1fa971;color:#fff;font-size:11px;padding:2px 7px;border-radius:8px}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -82,7 +83,7 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 
 <div id="stato">Pronto. La prima volta scarica il modello, poi è più veloce.</div>
 <div id="bar"><i></i></div>
-<div id="tools" hidden><button id="selAll">Seleziona tutte</button><button id="selNo">Nessuna</button><button id="svuota">Svuota</button></div>
+<div id="tools" hidden><button id="selAll">Seleziona tutte</button><button id="selNo">Nessuna</button><button id="svuota">Svuota</button><button id="retry" hidden>Riprova errori</button><button id="elim" hidden>Elimina salvate</button><button id="azz">Azzera elenco salvate</button></div>
 <div class="griglia" id="griglia"></div>
 
 <div id="azioni" hidden>
@@ -101,56 +102,56 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 <script type="module">
 import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm";
 
-const MAX = 2048, $ = id => document.getElementById(id);
+const MAX = 2048, PART = 25, $ = id => document.getElementById(id);
 const stato = $("stato"), barra = document.querySelector("#bar i"), griglia = $("griglia");
-let items = [], coda = [], lavorando = false, tot = 0, fatte = 0, rt;
+let items = [], coda = [], lavorando = false, tot = 0, fatte = 0, rt, nota = "";
 const O = { bg: "t", fm: 0, crop: true, mg: 6, sh: false };
+let salvate = new Set(); try { salvate = new Set(JSON.parse(localStorage.getItem("salvate") || "[]")); } catch (e) {}
+const memorizza = () => { try { localStorage.setItem("salvate", JSON.stringify([...salvate])); } catch (e) {} };
 const toBlob = (c, t, q) => new Promise(r => c.toBlob(r, t, q));
-
+const cvNuovo = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
+const scarta = c => { if (c) { c.width = 1; c.height = 1; } };
+async function daBlob(b) { const m = await createImageBitmap(b); const c = cvNuovo(m.width, m.height); c.getContext("2d").drawImage(m, 0, 0); m.close(); return c; }
 async function ridimensiona(file) {
-  const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const s = Math.min(1, MAX / Math.max(bmp.width, bmp.height));
-  const c = document.createElement("canvas");
-  c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
-  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height); bmp.close();
-  return c;
+  const m = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const s = Math.min(1, MAX / Math.max(m.width, m.height));
+  const c = cvNuovo(Math.round(m.width * s), Math.round(m.height * s));
+  c.getContext("2d").drawImage(m, 0, 0, c.width, c.height); m.close(); return c;
 }
-
-// ---- composizione finale (ritaglio, formato, sfondo, ombra) ----
-function bbox(it) {
-  if (it.bb) return it.bb;
-  const W = it.res.width, H = it.res.height, s = Math.min(1, 400 / Math.max(W, H));
-  const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(W * s)); c.height = Math.max(1, Math.round(H * s));
-  const x = c.getContext("2d"); x.drawImage(it.res, 0, 0, c.width, c.height);
-  const d = x.getImageData(0, 0, c.width, c.height).data;
-  let a = c.width, b = c.height, e = -1, f = -1;
-  for (let y = 0; y < c.height; y++) for (let i = 0; i < c.width; i++)
-    if (d[(y * c.width + i) * 4 + 3] > 12) { if (i < a) a = i; if (i > e) e = i; if (y < b) b = y; if (y > f) f = y; }
-  if (e < 0) return it.bb = { x: 0, y: 0, w: W, h: H };
-  const px = Math.max(0, Math.floor(a / s) - 1), py = Math.max(0, Math.floor(b / s) - 1);
-  return it.bb = { x: px, y: py, w: Math.min(W - px, Math.ceil((e + 1) / s) + 1 - px), h: Math.min(H - py, Math.ceil((f + 1) / s) + 1 - py) };
+function piccola(c) {
+  const s = Math.min(1, 700 / Math.max(c.width, c.height));
+  const p = cvNuovo(Math.max(1, Math.round(c.width * s)), Math.max(1, Math.round(c.height * s)));
+  p.getContext("2d").drawImage(c, 0, 0, p.width, p.height); return p;
 }
-function compose(it, L) {
-  const r = O.crop ? bbox(it) : { x: 0, y: 0, w: it.res.width, h: it.res.height };
+function calcBB(c) {
+  const W = c.width, H = c.height, d = c.getContext("2d").getImageData(0, 0, W, H).data;
+  let a = W, b = H, e = -1, f = -1;
+  for (let y = 0; y < H; y++) for (let i = 0; i < W; i++)
+    if (d[(y * W + i) * 4 + 3] > 12) { if (i < a) a = i; if (i > e) e = i; if (y < b) b = y; if (y > f) f = y; }
+  if (e < 0) return { x: 0, y: 0, w: 1, h: 1 };
+  a = Math.max(0, a - 1); b = Math.max(0, b - 1); e = Math.min(W - 1, e + 1); f = Math.min(H - 1, f + 1);
+  return { x: a / W, y: b / H, w: (e + 1 - a) / W, h: (f + 1 - b) / H };
+}
+function compose(it, L, src) {
+  const SW = src.width, SH = src.height;
+  const r = O.crop ? { x: it.bb.x * SW, y: it.bb.y * SH, w: it.bb.w * SW, h: it.bb.h * SH } : { x: 0, y: 0, w: SW, h: SH };
   const m = O.mg / 100 * Math.max(r.w, r.h);
   let W = r.w + 2 * m, H = r.h + 2 * m;
   if (O.fm) { if (W / H > O.fm) H = W / O.fm; else W = H * O.fm; }
   const k = (L || (O.fm ? 1920 : Math.min(2048, Math.max(W, H)))) / Math.max(W, H);
-  const c = document.createElement("canvas"); c.width = Math.round(W * k); c.height = Math.round(H * k);
-  const x = c.getContext("2d");
+  const c = cvNuovo(Math.round(W * k), Math.round(H * k)), x = c.getContext("2d");
   if (O.bg !== "t") { x.fillStyle = O.bg; x.fillRect(0, 0, c.width, c.height); }
   if (O.sh) { const bl = Math.max(c.width, c.height) * 0.03; x.shadowColor = "rgba(0,0,0,.38)"; x.shadowBlur = bl; x.shadowOffsetY = bl * 0.6; }
   const dw = r.w * k, dh = r.h * k;
-  x.drawImage(it.res, r.x, r.y, r.w, r.h, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  x.drawImage(src, r.x, r.y, r.w, r.h, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
   return c;
 }
 function paint(it) {
   if (!it.ok) return;
-  const c = compose(it, 480); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0);
+  const c = compose(it, 480, it.small); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0); scarta(c);
 }
 const rip = () => { cancelAnimationFrame(rt); rt = requestAnimationFrame(() => items.forEach(paint)); };
 
-// ---- impostazioni ----
 function seg(id, fn) {
   const el = $(id);
   el.onclick = e => { const b = e.target.closest("button"); if (!b) return;
@@ -163,61 +164,74 @@ $("crop").onchange = e => { O.crop = e.target.checked; rip(); };
 $("mg").oninput = e => { O.mg = +e.target.value; rip(); };
 $("ombra").onchange = e => { O.sh = e.target.checked; rip(); };
 
-// ---- coda foto ----
+// ---- coda ----
 function creaCard(it) {
   const c = document.createElement("div"); c.className = "card wait"; it.el = c;
-  c.innerHTML = '<label class="chk"><input type="checkbox" checked></label><button class="x">✕</button><div class="msg">In attesa…</div><canvas></canvas><div class="r"><button class="g">Ritocca</button><button>Salva</button></div>';
-  it.cv = c.querySelector("canvas");
+  c.innerHTML = '<label class="chk"><input type="checkbox" checked></label><button class="x">✕</button><div class="msg">In attesa…</div><canvas></canvas><div class="nm"></div><div class="r"><button class="g">Ritocca</button><button>Salva</button></div>';
+  it.cv = c.querySelector("canvas"); c.querySelector(".nm").textContent = it.nome;
   c.querySelector("input").onchange = e => { it.sel = e.target.checked; conta(); };
   c.querySelector(".x").onclick = () => { it.rimossa = true; items = items.filter(i => i !== it); c.remove(); conta(); };
   const bs = c.querySelectorAll(".r button");
   bs[0].onclick = () => apri(it);
-  bs[1].onclick = async () => condividi(await files([it]));
+  bs[1].onclick = () => condividi([it]);
   griglia.appendChild(c);
 }
 function aggiungi(list) {
-  list = [...list].filter(f => f.type.startsWith("image/")); if (!list.length) return;
+  list = [...list].filter(f => f.type.startsWith("image/")).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (!list.length) return;
+  let saltate = 0;
   for (const f of list) {
-    const it = { file: f, nome: f.name.replace(/\.[^.]+$/, "") || "foto", sel: true, ok: false };
+    const k = f.name + "|" + f.size;
+    if (salvate.has(k) || items.some(i => i.chiave === k)) { saltate++; continue; }
+    const it = { file: f, chiave: k, nome: f.name.replace(/\.[^.]+$/, "") || "foto", sel: true, ok: false };
     creaCard(it); items.push(it); coda.push(it); tot++;
   }
-  $("tools").hidden = false; conta(); processa();
+  nota = saltate ? " · " + saltate + " già presenti o già salvate: saltate" : "";
+  conta(); if (!coda.length) riepilogo("Fatto"); processa();
+}
+function riepilogo(p) {
+  const ok = items.filter(i => i.ok).length, er = items.filter(i => i.err).length;
+  stato.textContent = p + ": " + ok + " pronte · " + coda.length + " in attesa · " + er + " errori" + nota;
+}
+async function elabora(it) {
+  const orig = await ridimensiona(it.file);
+  const inB = await toBlob(orig, "image/jpeg", 0.9); scarta(orig);
+  const out = await removeBackground(inB, {
+    model: $("q").value, output: { format: "image/png" },
+    progress: (k, cur, t) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / t * 100) + "%"; }
+  });
+  const full = await daBlob(out);
+  it.origB = inB; it.resB = out; it.baseB = out; it.small = piccola(full); it.bb = calcBB(it.small); scarta(full);
+  it.ok = true; it.err = false; it.file = null;
 }
 async function processa() {
   if (lavorando) return; lavorando = true;
   while (coda.length) {
     const it = coda.shift();
     if (it.rimossa) { fatte++; continue; }
-    stato.textContent = "Elaboro " + (fatte + 1) + " di " + tot + "…";
-    barra.style.width = (fatte / tot * 100) + "%";
-    it.el.querySelector(".msg").textContent = "Elaboro…";
-    try {
-      const orig = await ridimensiona(it.file);
-      const out = await removeBackground(await toBlob(orig, "image/jpeg", 0.95), {
-        model: $("q").value, output: { format: "image/png" },
-        progress: (k, cur, t) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / t * 100) + "%"; }
-      });
-      const bmp = await createImageBitmap(out);
-      it.res = document.createElement("canvas"); it.res.width = bmp.width; it.res.height = bmp.height;
-      it.res.getContext("2d").drawImage(bmp, 0, 0);
-      it.base = document.createElement("canvas"); it.base.width = bmp.width; it.base.height = bmp.height;
-      it.base.getContext("2d").drawImage(it.res, 0, 0);
-      it.orig = orig; it.ok = true; it.el.classList.remove("wait"); paint(it);
-    } catch (e) {
-      it.el.classList.remove("wait"); it.el.classList.add("err");
-      it.el.querySelector(".msg").textContent = "Errore su " + it.nome + ". Prova la qualità Veloce.";
+    barra.style.width = (fatte / Math.max(tot, 1) * 100) + "%"; riepilogo("Elaboro");
+    it.el.classList.add("wait"); it.el.classList.remove("err"); it.el.querySelector(".msg").textContent = "Elaboro…";
+    try { await elabora(it); it.el.classList.remove("wait"); paint(it); }
+    catch (e) {
+      if (!it.ritentato) { it.ritentato = true; it.el.querySelector(".msg").textContent = "Ritento…"; coda.push(it); tot++; }
+      else { it.el.classList.remove("wait"); it.err = true; it.el.classList.add("err"); it.el.querySelector(".msg").textContent = "Errore su " + it.nome; }
     }
     fatte++; conta();
+    await new Promise(r => setTimeout(r, 60));
   }
   barra.style.width = "100%";
-  stato.textContent = "Finito: " + items.filter(i => i.ok).length + " foto pronte. Tocca Ritocca per sistemare i bordi.";
+  const er = items.filter(i => i.err).map(i => i.nome);
+  stato.textContent = "Finito: " + items.filter(i => i.ok).length + " pronte" +
+    (er.length ? " · " + er.length + " con errore (" + er.slice(0, 6).join(", ") + (er.length > 6 ? "…" : "") + "): tocca Riprova errori" : "") + nota;
   tot = 0; fatte = 0; lavorando = false;
 }
 function conta() {
-  const n = items.filter(i => i.ok && i.sel).length;
+  const n = items.filter(i => i.ok && i.sel).length, ne = items.filter(i => i.err).length;
   $("zip").textContent = "Scarica ZIP (" + n + ")"; $("share").textContent = "Salva in Foto (" + n + ")";
   $("zip").disabled = $("share").disabled = n === 0;
   $("azioni").hidden = !items.some(i => i.ok); $("tools").hidden = items.length === 0;
+  $("retry").hidden = ne === 0; $("retry").textContent = "Riprova errori (" + ne + ")";
+  $("elim").hidden = !items.some(i => i.salvata);
 }
 $("file").onchange = e => { aggiungi(e.target.files); e.target.value = ""; };
 const dz = $("drop");
@@ -227,17 +241,33 @@ dz.ondrop = e => { e.preventDefault(); dz.classList.remove("su"); aggiungi(e.dat
 const setSel = v => { items.forEach(i => { i.sel = v; i.el.querySelector("input").checked = v; }); conta(); };
 $("selAll").onclick = () => setSel(true); $("selNo").onclick = () => setSel(false);
 $("svuota").onclick = () => { if (!confirm("Rimuovere tutte le foto?")) return; items.forEach(i => i.rimossa = true); items = []; griglia.innerHTML = ""; conta(); };
+$("retry").onclick = () => {
+  items.filter(i => i.err).forEach(i => { i.err = false; i.ritentato = false; i.el.classList.remove("err"); i.el.classList.add("wait"); i.el.querySelector(".msg").textContent = "In attesa…"; coda.push(i); tot++; });
+  conta(); processa();
+};
+$("elim").onclick = () => {
+  items.filter(i => i.salvata).forEach(i => { i.rimossa = true; i.el.remove(); });
+  items = items.filter(i => !i.salvata); conta(); riepilogo("Fatto");
+};
+$("azz").onclick = () => { salvate.clear(); memorizza(); alert("Elenco delle foto salvate azzerato."); };
 
 // ---- salvataggio ----
 function nomi(list) {
   const m = {};
   return list.map(i => { const n = i.nome + "-senza-sfondo"; m[n] = (m[n] || 0) + 1; return m[n] > 1 ? n + "-" + m[n] + ".png" : n + ".png"; });
 }
+async function esporta(it) {
+  const full = await daBlob(it.resB), c = compose(it, null, full); scarta(full);
+  const b = await toBlob(c, "image/png"); scarta(c); return b;
+}
 async function files(list) {
   const nm = nomi(list), out = [];
-  for (let k = 0; k < list.length; k++)
-    out.push(new File([await toBlob(compose(list[k], null), "image/png")], nm[k], { type: "image/png" }));
+  for (let k = 0; k < list.length; k++) out.push(new File([await esporta(list[k])], nm[k], { type: "image/png" }));
   return out;
+}
+function segna(list) {
+  list.forEach(i => { i.salvata = true; i.el.classList.add("sv"); salvate.add(i.chiave); });
+  memorizza(); conta();
 }
 function mostra(fl) {
   const o = document.createElement("div");
@@ -252,56 +282,69 @@ function mostra(fl) {
   c.style.cssText = "width:100%;padding:14px;border:0;border-radius:12px;background:var(--ac);color:#fff;font-size:16px;font-weight:700";
   c.onclick = () => o.remove(); o.appendChild(c); document.body.appendChild(o);
 }
-function errore(e, fl) {
-  stato.textContent = "Il salvataggio diretto non è riuscito (" + e.name + (e.message ? ": " + e.message : "") + "). ";
-  const b = document.createElement("button"); b.textContent = "Salva tenendo premuta l’immagine";
-  b.onclick = () => mostra(fl); stato.appendChild(b);
-}
-async function condividi(fl) {
+async function condividi(list) {
+  stato.textContent = "Preparo " + list.length + " foto…";
+  const fl = await files(list);
   if (!navigator.share) { mostra(fl); return; }
   const G = 4;
   if (fl.length <= G) {
-    try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; }
-    catch (e) { if (e.name !== "AbortError") errore(e, fl); }
+    try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; segna(list); }
+    catch (e) {
+      if (e.name === "AbortError") return;
+      stato.textContent = "Il salvataggio diretto non è riuscito (" + e.name + (e.message ? ": " + e.message : "") + "). ";
+      const b = document.createElement("button"); b.textContent = "Salva tenendo premuta l’immagine";
+      b.onclick = () => { mostra(fl); segna(list); }; stato.appendChild(b);
+    }
     return;
   }
-  const gr = [];
-  for (let i = 0; i < fl.length; i += G) gr.push(fl.slice(i, i + G));
-  stato.innerHTML = "Foto pronte. Tocca un gruppo alla volta:";
-  gr.forEach((g, k) => {
-    const b = document.createElement("button");
+  stato.textContent = "Foto pronte. Tocca un gruppo alla volta:";
+  for (let k = 0; k * G < fl.length; k++) {
+    const g = fl.slice(k * G, k * G + G), gi = list.slice(k * G, k * G + G), b = document.createElement("button");
     b.style.cssText = "display:block;margin:8px 0;padding:12px;width:100%;border-radius:10px;background:var(--card);border:1px solid var(--ln)";
-    b.textContent = "Salva gruppo " + (k + 1) + " di " + gr.length + " (" + g.length + " foto)";
+    b.textContent = "Salva gruppo " + (k + 1) + " di " + Math.ceil(fl.length / G) + " (" + g.length + " foto)";
     b.onclick = async () => {
-      try { await navigator.share({ files: g }); b.textContent = "✓ Gruppo " + (k + 1) + " fatto"; }
+      try { await navigator.share({ files: g }); b.textContent = "✓ Gruppo " + (k + 1) + " fatto"; segna(gi); }
       catch (e) { if (e.name !== "AbortError") { b.textContent = "Errore (" + e.name + "): tocca per il metodo manuale"; b.onclick = () => mostra(g); } }
     };
     stato.appendChild(b);
-  });
+  }
 }
-$("share").onclick = async () => {
-  const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
-  stato.textContent = "Preparo " + sel.length + " foto…"; condividi(await files(sel));
+$("share").onclick = () => {
+  const sel = items.filter(i => i.ok && i.sel);
+  if (sel.length > 12) { alert("Per tante foto usa Scarica ZIP: poi da File apri lo ZIP, seleziona tutto e tocca Condividi → Salva immagini. Oppure seleziona al massimo 12 foto."); return; }
+  if (sel.length) condividi(sel);
 };
-$("zip").onclick = async () => {
+$("zip").onclick = () => {
   const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
-  stato.textContent = "Preparo lo ZIP…";
-  const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
-  const z = new JSZip(); for (const f of await files(sel)) z.file(f.name, f);
-  const url = URL.createObjectURL(await z.generateAsync({ type: "blob" }));
-  stato.innerHTML = '<a href="' + url + '" download="foto-senza-sfondo.zip">Tocca qui per scaricare lo ZIP (' + sel.length + ' foto)</a>';
-  const a = document.createElement("a"); a.href = url; a.download = "foto-senza-sfondo.zip"; a.click();
+  const parti = []; for (let i = 0; i < sel.length; i += PART) parti.push(sel.slice(i, i + PART));
+  stato.textContent = "Scarica una parte alla volta (" + PART + " foto ciascuna):";
+  parti.forEach((p, k) => {
+    const b = document.createElement("button");
+    b.style.cssText = "display:block;margin:8px 0;padding:12px;width:100%;border-radius:10px;background:var(--card);border:1px solid var(--ln)";
+    b.textContent = "Parte " + (k + 1) + " di " + parti.length + " (" + p.length + " foto)";
+    b.onclick = async () => {
+      b.textContent = "Preparo la parte " + (k + 1) + "…";
+      const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
+      const z = new JSZip(); for (const f of await files(p)) z.file(f.name, f);
+      const url = URL.createObjectURL(await z.generateAsync({ type: "blob" }));
+      const a = document.createElement("a"); a.href = url; a.download = "foto-senza-sfondo-parte-" + (k + 1) + ".zip"; a.click();
+      b.textContent = "✓ Parte " + (k + 1) + " pronta. Se non parte, tocca qui"; b.onclick = () => a.click(); segna(p);
+    };
+    stato.appendChild(b);
+  });
 };
 
 // ---- ritocco ----
 const cv = $("cv"), ctx = cv.getContext("2d");
-let cur = null, modo = "C", giu = false, ultimo = null;
+let cur = null, curOrig = null, modo = "C", giu = false, ultimo = null;
 function modoSet(m) { modo = m; ["C", "R", "S"].forEach(k => $("m" + k).classList.toggle("on", k === m)); cv.style.touchAction = m === "S" ? "auto" : "none"; }
 $("mC").onclick = () => modoSet("C"); $("mR").onclick = () => modoSet("R"); $("mS").onclick = () => modoSet("S");
 $("zm").oninput = e => { cv.style.width = (e.target.value * 100) + "%"; };
-function apri(it) {
-  if (!it.ok) return; cur = it; cv.width = it.res.width; cv.height = it.res.height;
-  ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(it.res, 0, 0);
+async function apri(it) {
+  if (!it.ok) return;
+  const full = await daBlob(it.resB); cv.width = full.width; cv.height = full.height;
+  ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(full, 0, 0); scarta(full);
+  curOrig = await createImageBitmap(it.origB); cur = it;
   cv.style.width = "100%"; $("zm").value = 1; modoSet("C"); $("ed").hidden = false;
 }
 function punto(e) { const r = cv.getBoundingClientRect(), s = cv.width / r.width; return { x: (e.clientX - r.left) * s, y: (e.clientY - r.top) * s }; }
@@ -309,7 +352,7 @@ const raggio = () => $("sz").value * (cv.width / 1000);
 function pennella(p) {
   ctx.save(); ctx.beginPath(); ctx.arc(p.x, p.y, raggio(), 0, 7);
   if (modo === "C") { ctx.globalCompositeOperation = "destination-out"; ctx.fill(); }
-  else { ctx.clip(); ctx.drawImage(cur.orig, 0, 0, cv.width, cv.height); }
+  else { ctx.clip(); ctx.drawImage(curOrig, 0, 0, cv.width, cv.height); }
   ctx.restore();
 }
 function tratto(a, b) {
@@ -319,10 +362,13 @@ function tratto(a, b) {
 cv.onpointerdown = e => { if (modo === "S") return; giu = true; cv.setPointerCapture(e.pointerId); ultimo = punto(e); pennella(ultimo); };
 cv.onpointermove = e => { if (!giu) return; const p = punto(e); tratto(ultimo, p); ultimo = p; };
 cv.onpointerup = cv.onpointercancel = () => { giu = false; };
-$("ann").onclick = () => { ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(cur.base, 0, 0); };
-$("fine").onclick = () => {
-  const x = cur.res.getContext("2d"); x.clearRect(0, 0, cur.res.width, cur.res.height); x.drawImage(cv, 0, 0);
-  cur.bb = null; paint(cur); $("ed").hidden = true;
+$("ann").onclick = async () => {
+  const m = await createImageBitmap(cur.baseB); ctx.clearRect(0, 0, cv.width, cv.height); ctx.drawImage(m, 0, 0); m.close();
+};
+$("fine").onclick = async () => {
+  cur.resB = await toBlob(cv, "image/png"); cur.small = piccola(cv); cur.bb = calcBB(cur.small);
+  cur.salvata = false; cur.el.classList.remove("sv"); salvate.delete(cur.chiave); memorizza();
+  paint(cur); if (curOrig) curOrig.close(); curOrig = null; cv.width = 1; cv.height = 1; $("ed").hidden = true; conta();
 };
 </script>
 </body>
