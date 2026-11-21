@@ -63,7 +63,7 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 </style>
 </head>
 <body>
-<header><div class="logo">✂</div><div><h1>Senza sfondo</h1><p>Foto prodotto pronte per i tuoi video</p></div></header>
+<header><div class="logo">✂</div><div><h1>Senza sfondo</h1><p>Foto per il sito + prodotti per i video</p></div></header>
 
 <label id="drop" for="file"><b>＋ Aggiungi foto</b><span>Scegline quante vuoi, puoi aggiungerne altre in qualsiasi momento</span></label>
 <input id="file" type="file" accept="image/*" multiple hidden>
@@ -73,7 +73,7 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 <option value="isnet_quint8">Veloce</option>
 <option value="isnet_fp16" selected>Alta qualità</option>
 <option value="isnet">Massima (lenta)</option></select></div>
-<div class="row"><span>Sfondo</span><div class="seg" id="sBg">
+<div class="row" id="rowBg"><span>Sfondo</span><div class="seg" id="sBg">
 <button class="on" data-v="t">Trasparente</button><button data-v="#ffffff">Bianco</button><button data-v="#000000">Nero</button>
 <input type="color" id="colr" value="#e8f0ff" title="Colore a scelta"></div></div>
 <div class="row"><span>Formato</span><div class="seg" id="sFm">
@@ -81,6 +81,11 @@ background:var(--card);border-top:1px solid var(--ln);max-width:720px;margin:0 a
 <div class="row"><span>Ritaglia sul prodotto</span><input type="checkbox" id="crop" checked></div>
 <div class="row"><span>Margine</span><input type="range" id="mg" min="0" max="30" value="6"></div>
 <div class="row"><span>Ombra morbida</span><input type="checkbox" id="ombra"></div>
+<div class="row"><span>Separa più prodotti</span><input type="checkbox" id="split" checked></div>
+<div class="row"><span>Distanza tra prodotti</span><input type="range" id="gap" min="0" max="8" value="2"></div>
+<div class="row"><span>Migliora luce e colori</span><input type="checkbox" id="enh" checked></div>
+<div class="row"><span>Esporta 2 versioni</span><input type="checkbox" id="dual" checked></div>
+<div class="row" id="hint" style="display:block;font-size:12px;color:var(--mut);line-height:1.4">Per ogni prodotto: <b>-sito.jpg</b> (sfondo bianco, per la pubblicità) e <b>-video.png</b> (trasparente, per i video). “Separa” e “Distanza” valgono per le foto che aggiungi da ora.</div>
 </div>
 
 <div id="stato">Pronto. La prima volta scarica il modello, poi è più veloce.</div>
@@ -110,7 +115,8 @@ const MAX = 2048, PART = 25, $ = id => document.getElementById(id);
 const stato = $("stato"), barra = document.querySelector("#bar i"), griglia = $("griglia");
 let items = [], coda = [], lavorando = false, tot = 0, fatte = 0, rt, nota = "";
 const perChiave = new Map();
-const O = { bg: "t", fm: 0, crop: true, mg: 6, sh: false };
+const O = { bg: "t", fm: 0, crop: true, mg: 6, sh: false, split: true, gap: 2, enh: true, dual: true };
+const vista = () => O.dual ? { bg: "#ffffff" } : null;
 let fatti = new Set();
 try { fatti = new Set([...JSON.parse(localStorage.getItem("fatti") || "[]"), ...JSON.parse(localStorage.getItem("salvate") || "[]")]); } catch (e) {}
 const memFatti = () => { try { localStorage.setItem("fatti", JSON.stringify([...fatti])); } catch (e) {} };
@@ -153,23 +159,58 @@ async function spazio() {
   } catch (e) {}
 }
 
-function compose(it, L, src) {
+// Luce e colori, in modo prudente: schiarisce/contrasta solo la luminosità (i rapporti tra i colori restano uguali)
+// e corregge una dominante di colore solo se il prodotto è quasi neutro (bianco, grigio, argento).
+function enhance(c) {
+  const W = c.width, H = c.height, x = c.getContext("2d"), im = x.getImageData(0, 0, W, H), d = im.data;
+  const hist = new Uint32Array(256); let n = 0, sr = 0, sg = 0, sb = 0;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 200) continue;
+    hist[(d[i] * 77 + d[i + 1] * 151 + d[i + 2] * 28) >> 8]++; n++; sr += d[i]; sg += d[i + 1]; sb += d[i + 2];
+  }
+  if (n < 50) return;
+  const pc = f => { let a = 0; for (let v = 0; v < 256; v++) { a += hist[v]; if (a >= n * f) return v; } return 255; };
+  const lo = Math.min(pc(0.01), 20), hi = Math.max(pc(0.99), 235), span = hi - lo;
+  const mr = sr / n, mg = sg / n, mb = sb / n, gm = (mr + mg + mb) / 3 || 1;
+  const sat = (Math.max(mr, mg, mb) - Math.min(mr, mg, mb)) / (Math.max(mr, mg, mb) || 1), kc = sat < 0.12 ? 0.6 : 0;
+  const gain = m => Math.min(1.1, Math.max(0.9, 1 + (gm / (m || 1) - 1) * kc));
+  const G = [gain(mr), gain(mg), gain(mb)];
+  let ml = 0; for (let v = 0; v < 256; v++) ml += v * hist[v];
+  const mn = Math.min(0.95, Math.max(0.05, (ml / n - lo) / span));
+  const gam = Math.min(1, Math.max(0.85, Math.log(0.5) / Math.log(mn)));   // solo schiarisce, mai scurisce
+  const curva = new Float32Array(256); for (let v = 0; v < 256; v++) curva[v] = 255 * Math.pow(Math.min(1, Math.max(0, (v - lo) / span)), gam);
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i] * G[0], g = d[i + 1] * G[1], b = d[i + 2] * G[2], l = (r * 77 + g * 151 + b * 28) / 256;
+    const f = l < 4 ? 1 : Math.min(1.6, curva[Math.min(255, Math.round(l))] / l);
+    d[i] = r * f; d[i + 1] = g * f; d[i + 2] = b * f;
+  }
+  x.putImageData(im, 0, 0);
+}
+function compose(it, L, src, ov) {
+  const o = ov ? Object.assign({}, O, ov) : O;
   const SW = src.width, SH = src.height;
-  const r = O.crop ? { x: it.bb.x * SW, y: it.bb.y * SH, w: it.bb.w * SW, h: it.bb.h * SH } : { x: 0, y: 0, w: SW, h: SH };
-  const m = O.mg / 100 * Math.max(r.w, r.h);
+  const r = o.crop ? { x: it.bb.x * SW, y: it.bb.y * SH, w: it.bb.w * SW, h: it.bb.h * SH } : { x: 0, y: 0, w: SW, h: SH };
+  const m = o.mg / 100 * Math.max(r.w, r.h);
   let W = r.w + 2 * m, H = r.h + 2 * m;
-  if (O.fm) { if (W / H > O.fm) H = W / O.fm; else W = H * O.fm; }
-  const k = (L || (O.fm ? 1920 : Math.min(2048, Math.max(W, H)))) / Math.max(W, H);
+  if (o.fm) { if (W / H > o.fm) H = W / o.fm; else W = H * o.fm; }
+  const k = (L || (o.fm ? 1920 : Math.min(2048, Math.max(W, H)))) / Math.max(W, H);
   const c = cvNuovo(Math.round(W * k), Math.round(H * k)), x = c.getContext("2d");
-  if (O.bg !== "t") { x.fillStyle = O.bg; x.fillRect(0, 0, c.width, c.height); }
-  if (O.sh) { const bl = Math.max(c.width, c.height) * 0.03; x.shadowColor = "rgba(0,0,0,.38)"; x.shadowBlur = bl; x.shadowOffsetY = bl * 0.6; }
+  if (o.bg !== "t") { x.fillStyle = o.bg; x.fillRect(0, 0, c.width, c.height); }
+  if (o.sh) { const bl = Math.max(c.width, c.height) * 0.03; x.shadowColor = "rgba(0,0,0,.38)"; x.shadowBlur = bl; x.shadowOffsetY = bl * 0.6; }
   const dw = r.w * k, dh = r.h * k;
-  x.drawImage(src, r.x, r.y, r.w, r.h, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  let s = src, sx = r.x, sy = r.y, sw = r.w, sh = r.h, tmp = null;
+  if (o.enh) {
+    tmp = cvNuovo(Math.max(1, Math.round(dw)), Math.max(1, Math.round(dh)));
+    tmp.getContext("2d").drawImage(src, r.x, r.y, r.w, r.h, 0, 0, tmp.width, tmp.height);
+    enhance(tmp); s = tmp; sx = 0; sy = 0; sw = tmp.width; sh = tmp.height;
+  }
+  x.drawImage(s, sx, sy, sw, sh, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+  scarta(tmp);
   return c;
 }
 function paint(it) {
   if (!it.ok || !it.small) return;
-  const c = compose(it, 400, it.small); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0); scarta(c);
+  const c = compose(it, 400, it.small, vista()); it.cv.width = c.width; it.cv.height = c.height; it.cv.getContext("2d").drawImage(c, 0, 0); scarta(c);
 }
 const rip = () => { cancelAnimationFrame(rt); rt = requestAnimationFrame(() => items.forEach(paint)); };
 
@@ -184,6 +225,12 @@ seg("sFm", v => { O.fm = parseFloat(v); rip(); });
 $("crop").onchange = e => { O.crop = e.target.checked; rip(); };
 $("mg").oninput = e => { O.mg = +e.target.value; rip(); };
 $("ombra").onchange = e => { O.sh = e.target.checked; rip(); };
+$("split").onchange = e => { O.split = e.target.checked; };
+$("gap").oninput = e => { O.gap = +e.target.value; };
+$("enh").onchange = e => { O.enh = e.target.checked; rip(); };
+function modoDual() { $("rowBg").style.opacity = O.dual ? 0.4 : 1; $("rowBg").style.pointerEvents = O.dual ? "none" : ""; }
+$("dual").onchange = e => { O.dual = e.target.checked; modoDual(); rip(); };
+modoDual();
 
 // ---- schede, log errori ----
 function creaCard(it) {
@@ -243,18 +290,106 @@ function riepilogo(p) {
   const ok = items.filter(i => i.ok).length, er = items.filter(i => i.err).length;
   stato.textContent = p + ": " + ok + " pronte · " + coda.length + " in attesa · " + er + " errori" + nota;
 }
+// Trova i singoli prodotti: componenti connesse della maschera (le parti vicine si uniscono, i pezzetti minuscoli si scartano)
+function trovaParti(sm) {
+  const w = sm.width, h = sm.height, N = w * h, d = sm.getContext("2d").getImageData(0, 0, w, h).data;
+  const m = new Uint8Array(N); let tot = 0;
+  for (let i = 0; i < N; i++) if (d[i * 4 + 3] > 40) { m[i] = 1; tot++; }
+  if (!tot) return null;
+  const rad = Math.max(1, Math.round(O.gap / 100 * Math.max(w, h)));
+  const a = new Uint8Array(N), dil = new Uint8Array(N);
+  for (let y = 0; y < h; y++) {
+    let u = -1e9; for (let x = 0; x < w; x++) { if (m[y * w + x]) u = x; if (x - u <= rad) a[y * w + x] = 1; }
+    u = 1e9; for (let x = w - 1; x >= 0; x--) { if (m[y * w + x]) u = x; if (u - x <= rad) a[y * w + x] = 1; }
+  }
+  for (let x = 0; x < w; x++) {
+    let u = -1e9; for (let y = 0; y < h; y++) { if (a[y * w + x]) u = y; if (y - u <= rad) dil[y * w + x] = 1; }
+    u = 1e9; for (let y = h - 1; y >= 0; y--) { if (a[y * w + x]) u = y; if (u - y <= rad) dil[y * w + x] = 1; }
+  }
+  const lab = new Int32Array(N), st = new Int32Array(N), P = []; let nl = 0;
+  for (let s0 = 0; s0 < N; s0++) {
+    if (!dil[s0] || lab[s0]) continue;
+    const id = ++nl, p = { id, area: 0, x0: w, y0: h, x1: -1, y1: -1 }; let sp = 0; st[sp++] = s0; lab[s0] = id;
+    while (sp) {
+      const i = st[--sp], x = i % w, y = (i - x) / w;
+      if (m[i]) { p.area++; if (x < p.x0) p.x0 = x; if (x > p.x1) p.x1 = x; if (y < p.y0) p.y0 = y; if (y > p.y1) p.y1 = y; }
+      if (x > 0 && dil[i - 1] && !lab[i - 1]) { lab[i - 1] = id; st[sp++] = i - 1; }
+      if (x < w - 1 && dil[i + 1] && !lab[i + 1]) { lab[i + 1] = id; st[sp++] = i + 1; }
+      if (y > 0 && dil[i - w] && !lab[i - w]) { lab[i - w] = id; st[sp++] = i - w; }
+      if (y < h - 1 && dil[i + w] && !lab[i + w]) { lab[i + w] = id; st[sp++] = i + w; }
+    }
+    if (p.area) P.push(p);
+  }
+  if (!P.length) return null;
+  const big = Math.max(...P.map(p => p.area));
+  let parts = P.filter(p => p.area >= Math.max(N * 0.002, big * 0.03)).sort((a, b) => b.area - a.area).slice(0, 12);
+  parts.forEach(p => { p.cx = (p.x0 + p.x1) / 2; p.cy = (p.y0 + p.y1) / 2; });
+  // ordine di lettura: righe dall'alto, da sinistra a destra
+  const hs = parts.map(p => p.y1 - p.y0 + 1).sort((a, b) => a - b), mh = hs[hs.length >> 1] || 1, rows = [];
+  for (const p of parts.slice().sort((a, b) => a.cy - b.cy)) {
+    const r = rows.find(r => Math.abs(r.cy - p.cy) < mh * 0.6);
+    if (r) { r.p.push(p); r.cy = r.p.reduce((s, q) => s + q.cy, 0) / r.p.length; } else rows.push({ cy: p.cy, p: [p] });
+  }
+  parts = rows.sort((a, b) => a.cy - b.cy).flatMap(r => r.p.sort((a, b) => a.cx - b.cx));
+  return { lab, w, h, rad, parts };
+}
+// Ritaglia un singolo prodotto (cutout + originale con stesse dimensioni), cancellando gli altri prodotti
+function ritaglia(full, orig, T, p) {
+  const sx = full.width / T.w, sy = full.height / T.h, pad = T.rad + 1;
+  const x0 = Math.max(0, Math.floor((p.x0 - pad) * sx)), y0 = Math.max(0, Math.floor((p.y0 - pad) * sy));
+  const x1 = Math.min(full.width, Math.ceil((p.x1 + 1 + pad) * sx)), y1 = Math.min(full.height, Math.ceil((p.y1 + 1 + pad) * sy));
+  const w = Math.max(1, x1 - x0), h = Math.max(1, y1 - y0);
+  const c = cvNuovo(w, h), cx = c.getContext("2d");
+  cx.drawImage(full, x0, y0, w, h, 0, 0, w, h);
+  const im = cx.getImageData(0, 0, w, h), d = im.data;
+  for (let y = 0; y < h; y++) {
+    const ly = Math.min(T.h - 1, Math.floor((y0 + y) / sy));
+    for (let x = 0; x < w; x++) if (T.lab[ly * T.w + Math.min(T.w - 1, Math.floor((x0 + x) / sx))] !== p.id) d[(y * w + x) * 4 + 3] = 0;
+  }
+  cx.putImageData(im, 0, 0);
+  const ox = orig.width / full.width, oy = orig.height / full.height, o = cvNuovo(w, h);
+  o.getContext("2d").drawImage(orig, x0 * ox, y0 * oy, w * ox, h * oy, 0, 0, w, h);
+  return { c, o };
+}
 async function elabora(it) {
+  const k0 = it.chiave0 || (it.chiave0 = it.chiave); it.nome0 = it.nome0 || it.nome;
   const orig = await ridimensiona(it.file, MAX);
-  const inB = await toBlob(orig, "image/jpeg", 0.95); scarta(orig);
+  const inB = await toBlob(orig, "image/jpeg", 0.95);
   const out = await removeBackground(inB, {
     model: $("q").value, output: { format: "image/png" },
     progress: (k, cur, t) => { if (k.startsWith("fetch")) stato.textContent = "Scarico il modello… " + Math.round(cur / t * 100) + "%"; }
   });
-  const full = await daBlob(out), sm = piccola(full, 400), bb = calcBB(sm); scarta(full);
-  const smallB = await toBlob(sm, "image/png");
-  await dbPut({ chiave: it.chiave, nome: it.nome, stato: "ok", resB: out, origB: inB, smallB, bb, salvata: false, ts: Date.now() });
-  it.small = sm; it.bb = bb; it.ok = true; it.err = false; it.file = null; it.thumbUrl = ""; it.salvata = false;
-  fatti.add(it.chiave); memFatti();
+  const full = await daBlob(out), sm = piccola(full, 400), T = O.split ? trovaParti(sm) : null;
+  if (!T || T.parts.length < 2) {
+    scarta(orig); const bb = calcBB(sm); scarta(full);
+    const smallB = await toBlob(sm, "image/png");
+    await dbPut({ chiave: k0, nome: it.nome, stato: "ok", resB: out, origB: inB, smallB, bb, salvata: false, ts: Date.now() });
+    it.small = sm; it.bb = bb; it.ok = true; it.err = false; it.file = null; it.thumbUrl = ""; it.salvata = false;
+    fatti.add(k0); memFatti();
+    return;
+  }
+  // più prodotti nella stessa foto: prima preparo tutto, poi creo le schede (così un errore non lascia metà lavoro)
+  const recs = [];
+  for (const p of T.parts) {
+    const { c, o } = ritaglia(full, orig, T, p), s2 = piccola(c, 400);
+    recs.push({ resB: await toBlob(c, "image/png"), origB: await toBlob(o, "image/jpeg", 0.95), smallB: await toBlob(s2, "image/png"), bb: calcBB(s2), sm: s2 });
+    scarta(c); scarta(o);
+  }
+  scarta(full); scarta(orig); scarta(sm);
+  let prev = null;
+  for (let n = 0; n < recs.length; n++) {
+    const r = recs[n], ck = k0 + "#" + (n + 1), nome = it.nome0 + "-" + (n + 1);
+    const vecchia = perChiave.get(ck);
+    if (vecchia && vecchia !== it) { vecchia.rimossa = true; items = items.filter(i => i !== vecchia); vecchia.el.remove(); perChiave.delete(ck); }
+    let t;
+    if (n === 0) { t = it; perChiave.delete(it.chiave); t.chiave = ck; t.nome = nome; perChiave.set(ck, t); t.el.querySelector(".nm").textContent = nome; }
+    else { t = { chiave: ck, nome, sel: true, ok: false }; creaCard(t); items.splice(items.indexOf(prev) + 1, 0, t); prev.el.after(t.el); }
+    t.padre = k0;
+    await dbPut({ chiave: ck, nome, stato: "ok", resB: r.resB, origB: r.origB, smallB: r.smallB, bb: r.bb, padre: k0, salvata: false, ts: Date.now() });
+    t.small = r.sm; t.bb = r.bb; t.ok = true; t.err = false; t.file = null; t.thumbUrl = ""; t.salvata = false;
+    t.el.classList.remove("wait", "err"); paint(t); fatti.add(ck); prev = t;
+  }
+  fatti.add(k0); memFatti();
 }
 async function fallita(it, e) {
   it.err = true; it.errMsg = (e && e.name ? e.name : "Errore") + (e && e.message ? ": " + e.message : "") + (e && e.name === "QuotaExceededError" ? " (memoria piena: scarica ed elimina le foto salvate)" : "");
@@ -318,9 +453,9 @@ async function ripristina() {
   let n = 0;
   for (const r of recs) {
     stato.textContent = "Ripristino le foto salvate… " + (++n) + " di " + recs.length;
-    const it = { chiave: r.chiave, nome: r.nome, sel: true, ok: r.stato === "ok", err: r.stato === "err", salvata: !!r.salvata, errMsg: r.errMsg };
+    const it = { chiave: r.chiave, nome: r.nome, sel: true, ok: r.stato === "ok", err: r.stato === "err", salvata: !!r.salvata, errMsg: r.errMsg, padre: r.padre };
     creaCard(it); items.push(it); it.el.classList.remove("wait");
-    if (it.ok) { it.bb = r.bb; it.small = await daBlob(r.smallB); paint(it); if (it.salvata) it.el.classList.add("sv"); fatti.add(it.chiave); }
+    if (it.ok) { it.bb = r.bb; it.small = await daBlob(r.smallB); paint(it); if (it.salvata) it.el.classList.add("sv"); fatti.add(it.chiave); if (r.padre) fatti.add(r.padre); }
     else { it.el.classList.add("err"); it.thumbUrl = r.thumbB ? URL.createObjectURL(r.thumbB) : ""; }
   }
   memFatti(); conta(); spazio();
@@ -329,19 +464,26 @@ async function ripristina() {
 pronto = ripristina();
 
 // ---- salvataggio verso l’iPhone ----
-function nomi(list) {
-  const m = {};
-  return list.map(i => { const n = i.nome + "-senza-sfondo"; m[n] = (m[n] || 0) + 1; return m[n] > 1 ? n + "-" + m[n] + ".png" : n + ".png"; });
-}
-async function esporta(it) {
-  const rec = await dbGet(it.chiave), full = await daBlob(rec.resB), c = compose(it, null, full); scarta(full);
-  const b = await toBlob(c, "image/png"); scarta(c); return b;
-}
-async function files(list) {
-  const nm = nomi(list), out = [];
-  for (let k = 0; k < list.length; k++) out.push(new File([await esporta(list[k])], nm[k], { type: "image/png" }));
+// Versioni esportate: sito (sfondo bianco, JPG) + video (trasparente, PNG) oppure solo come nell'anteprima
+const modi = () => O.dual ? [
+  { suf: "-sito", ext: "jpg", type: "image/jpeg", q: 0.95, ov: { bg: "#ffffff" } },
+  { suf: "-video", ext: "png", type: "image/png", ov: { bg: "t", sh: false, fm: 0, mg: 2, crop: true } }
+] : [{ suf: "-senza-sfondo", ext: "png", type: "image/png", ov: null }];
+async function perItem(list) {
+  const md = modi(), usati = {}, out = [];
+  for (const it of list) {
+    const rec = await dbGet(it.chiave), full = await daBlob(rec.resB), fl = [];
+    for (const m of md) {
+      const base = it.nome + m.suf + "." + m.ext; usati[base] = (usati[base] || 0) + 1;
+      const nome = usati[base] > 1 ? it.nome + m.suf + "-" + usati[base] + "." + m.ext : base;
+      const c = compose(it, null, full, m.ov), b = await toBlob(c, m.type, m.q); scarta(c);
+      fl.push(new File([b], nome, { type: m.type }));
+    }
+    scarta(full); out.push(fl);
+  }
   return out;
 }
+const files = async list => (await perItem(list)).flat();
 async function segna(list) {
   for (const i of list) {
     i.salvata = true; i.el.classList.add("sv");
@@ -363,11 +505,10 @@ function mostra(fl) {
   c.onclick = () => o.remove(); o.appendChild(c); document.body.appendChild(o);
 }
 async function condividi(list) {
-  stato.textContent = "Preparo " + list.length + " foto…";
-  const fl = await files(list);
+  stato.textContent = "Preparo " + list.length + " prodotti…";
+  const per = await perItem(list), fl = per.flat();
   if (!navigator.share) { mostra(fl); return; }
-  const G = 4;
-  if (fl.length <= G) {
+  if (fl.length <= 4) {
     try { await navigator.share({ files: fl }); stato.textContent = "Fatto."; segna(list); }
     catch (e) {
       if (e.name === "AbortError") return;
@@ -377,11 +518,12 @@ async function condividi(list) {
     }
     return;
   }
+  const G = O.dual ? 2 : 4;
   stato.textContent = "Foto pronte. Tocca un gruppo alla volta:";
-  for (let k = 0; k * G < fl.length; k++) {
-    const g = fl.slice(k * G, k * G + G), gi = list.slice(k * G, k * G + G), b = document.createElement("button");
+  for (let k = 0; k * G < per.length; k++) {
+    const g = per.slice(k * G, k * G + G).flat(), gi = list.slice(k * G, k * G + G), b = document.createElement("button");
     b.style.cssText = "display:block;margin:8px 0;padding:12px;width:100%;border-radius:10px;background:var(--card);border:1px solid var(--ln)";
-    b.textContent = "Salva gruppo " + (k + 1) + " di " + Math.ceil(fl.length / G) + " (" + g.length + " foto)";
+    b.textContent = "Salva gruppo " + (k + 1) + " di " + Math.ceil(per.length / G) + " (" + g.length + " file)";
     b.onclick = async () => {
       try { await navigator.share({ files: g }); b.textContent = "✓ Gruppo " + (k + 1) + " fatto"; segna(gi); }
       catch (e) { if (e.name !== "AbortError") { b.textContent = "Errore (" + e.name + "): tocca per il metodo manuale"; b.onclick = () => mostra(g); } }
@@ -391,23 +533,23 @@ async function condividi(list) {
 }
 $("share").onclick = () => {
   const sel = items.filter(i => i.ok && i.sel);
-  if (sel.length > 12) { alert("Per tante foto usa Scarica ZIP: poi da File apri lo ZIP, seleziona tutto e tocca Condividi → Salva immagini. Oppure seleziona al massimo 12 foto."); return; }
+  if (sel.length * (O.dual ? 2 : 1) > 12) { alert("Per tanti file usa Scarica ZIP: poi da File apri lo ZIP, seleziona tutto e tocca Condividi → Salva immagini. Oppure seleziona al massimo " + (O.dual ? 6 : 12) + " prodotti."); return; }
   if (sel.length) condividi(sel);
 };
 $("zip").onclick = () => {
   const sel = items.filter(i => i.ok && i.sel); if (!sel.length) return;
-  const parti = []; for (let i = 0; i < sel.length; i += PART) parti.push(sel.slice(i, i + PART));
-  stato.textContent = "Scarica una parte alla volta (" + PART + " foto ciascuna):";
+  const parti = []; const PX = O.dual ? 12 : PART; for (let i = 0; i < sel.length; i += PX) parti.push(sel.slice(i, i + PX));
+  stato.textContent = "Scarica una parte alla volta (" + PX + " prodotti ciascuna):";
   parti.forEach((p, k) => {
     const b = document.createElement("button");
     b.style.cssText = "display:block;margin:8px 0;padding:12px;width:100%;border-radius:10px;background:var(--card);border:1px solid var(--ln)";
-    b.textContent = "Parte " + (k + 1) + " di " + parti.length + " (" + p.length + " foto)";
+    b.textContent = "Parte " + (k + 1) + " di " + parti.length + " (" + p.length + " prodotti)";
     b.onclick = async () => {
       b.textContent = "Preparo la parte " + (k + 1) + "…";
       const JSZip = (await import("https://cdn.jsdelivr.net/npm/jszip@3.10.1/+esm")).default;
       const z = new JSZip(); for (const f of await files(p)) z.file(f.name, f);
       const url = URL.createObjectURL(await z.generateAsync({ type: "blob" }));
-      const a = document.createElement("a"); a.href = url; a.download = "foto-senza-sfondo-parte-" + (k + 1) + ".zip"; a.click();
+      const a = document.createElement("a"); a.href = url; a.download = "prodotti-parte-" + (k + 1) + ".zip"; a.click();
       b.textContent = "✓ Parte " + (k + 1) + " pronta. Se non parte, tocca qui"; b.onclick = () => a.click(); segna(p);
     };
     stato.appendChild(b);
